@@ -4,8 +4,9 @@ iso.registerLocale(english);
 const favorites=['ID','IN','US','BR','PH','MX','TR','DE','GB','FR','JP','KR','AR','CA','PK','BD','VN','TH','MY','AU','ES','IT','PT','NL','SA','EG','ZA','NG','MA','DZ','IR','IQ','UA','PL','RU','CN','NP','LK','NO','SE','FI','DK','CH','BE','GR','RO','CL','CO','PE','EC','VE','KE','GH','ET','TZ','SG','NZ','IE','IL','PS'];
 export const countries=Object.entries(iso.getNames('en',{select:'official'})).map(([code,name])=>({code,name})).sort((a,b)=>{const ai=favorites.indexOf(a.code),bi=favorites.indexOf(b.code);return(ai<0?999:ai)-(bi<0?999:bi)||a.name.localeCompare(b.name);});
 export type Vote={id:string;viewerId:string;viewer:string;text:string;time:number};
-export type ArenaState={mode:'demo'|'live';connected?:boolean;status:string;scores:Record<string,number>;recent:(Vote&{code:string})[];cooldowns:Record<string,number>;seen:string[]};
-export const initialState=():ArenaState=>({mode:'demo',status:'Ready for a demo. YouTube is not connected.',scores:{},recent:[],cooldowns:{},seen:[]});
+export const POINTS_PER_VOTE=100;
+export type ArenaState={scoreVersion?:2;mode:'demo'|'live';connected?:boolean;status:string;scores:Record<string,number>;recent:(Vote&{code:string})[];cooldowns:Record<string,number>;seen:string[]};
+export const initialState=():ArenaState=>({scoreVersion:2,mode:'demo',status:'Ready for a demo. YouTube is not connected.',scores:{},recent:[],cooldowns:{},seen:[]});
 const normalize=(s:string)=>s.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
 const aliases=new Map<string,string>();
 for(const c of countries){aliases.set(normalize(c.name),c.code);const all=iso.getName(c.code,'en',{select:'all'});for(const name of Array.isArray(all)?all:[all])if(name)aliases.set(normalize(name),c.code);}
@@ -22,5 +23,10 @@ export function acceptVote(state:ArenaState,vote:Vote):{accepted:boolean;reason:
  const code=parseCountry(vote.text);if(!code)return{accepted:false,reason:'Send one country name, flag emoji, or !vote followed by its two-letter code.',state};
  const last=state.cooldowns[vote.viewerId];if(last!==undefined&&vote.time-last<10000)return{accepted:false,reason:`Wait ${Math.max(1,Math.ceil((10000-(vote.time-last))/1000))} seconds before voting again.`,state};
  const cooldowns=Object.fromEntries(Object.entries(state.cooldowns).filter(([,t])=>vote.time-t<10000));
- return{accepted:true,reason:'Vote counted.',state:{...state,scores:{...state.scores,[code]:(state.scores[code]||0)+1},recent:[{...vote,viewer:vote.viewer.slice(0,60),code},...state.recent].slice(0,30),cooldowns:{...cooldowns,[vote.viewerId]:vote.time},seen:[...state.seen,vote.id].slice(-10000)}};
+ return{accepted:true,reason:'Vote counted.',state:{...state,scores:{...state.scores,[code]:(state.scores[code]||0)+POINTS_PER_VOTE},recent:[{...vote,viewer:vote.viewer.slice(0,60),code},...state.recent].slice(0,30),cooldowns:{...cooldowns,[vote.viewerId]:vote.time},seen:[...state.seen,vote.id].slice(-10000)}};
+}
+
+export function migrateScores(state:ArenaState):ArenaState {
+ if(state.scoreVersion===2)return state;
+ return {...state,scoreVersion:2,scores:Object.fromEntries(Object.entries(state.scores).map(([code,votes])=>[code,votes*POINTS_PER_VOTE]))};
 }

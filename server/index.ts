@@ -1,13 +1,13 @@
 import {createServer,type ServerResponse} from 'node:http';
 import {readFileSync,writeFileSync,mkdirSync,renameSync,existsSync,statSync,createReadStream} from 'node:fs';
 import {resolve,extname,sep} from 'node:path';
-import {initialState,acceptVote,type ArenaState} from '../lib/arena.ts';
+import {initialState,acceptVote,migrateScores,type ArenaState} from '../lib/arena.ts';
 import {videoId,youtube} from './youtube.ts';
 import {createChatSource,consumeChat,applyChatBatch} from './chat-stream.ts';
 const port=Number(process.env.ARENA_PORT||4318),root=resolve('dist'),dataDir=resolve(process.env.ARENA_DATA_DIR||'.arena');
 mkdirSync(dataDir,{recursive:true});const file=resolve(dataDir,'state.json');
 let demo=initialState(),live: ArenaState={...initialState(),mode:'live',status:'Disconnected — scores saved.'},savedVideo='';
-if(existsSync(file)){try{const saved=JSON.parse(readFileSync(file,'utf8'));if(saved.demo?.scores&&saved.live?.scores){demo=saved.demo;live=saved.live;savedVideo=saved.video||'';}}catch{console.error('Saved scores could not be read. The original file is preserved.');process.exit(1);}}
+if(existsSync(file)){try{const saved=JSON.parse(readFileSync(file,'utf8'));if(saved.demo?.scores&&saved.live?.scores){demo=migrateScores(saved.demo);live=migrateScores(saved.live);savedVideo=saved.video||'';}}catch{console.error('Saved scores could not be read. The original file is preserved.');process.exit(1);}}
 let state=demo,session:{since:number;controller:AbortController;close:()=>void}|undefined,generation=0,connecting=false;
 const clients=new Set<ServerResponse>();
 function persist(){const temporary=file+'.tmp';writeFileSync(temporary,JSON.stringify({demo,live,video:savedVideo}));renameSync(temporary,file);}

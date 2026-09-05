@@ -14,9 +14,9 @@ The hosted private preview is demo-only. Use the local app for YouTube and OBS: 
 
 ## Votes
 
-- One country name (English), supported alias, flag emoji, or `!vote ID` gives one point.
+- One country name (English), supported alias, flag emoji, or `!vote ID` gives 100 points.
 - One accepted vote per YouTube channel ID every 10 seconds, across all countries.
-- Multiple different countries, ordinary chat and paid events are ignored. Repeating a flag in one message still gives only one point.
+- Multiple different countries, ordinary chat and paid events are ignored. Repeating a flag in one message still gives only 100 points.
 - All ISO-listed countries/territories can receive votes. The overlay shows the leading 120; unranked ties sort alphabetically.
 - New connections skip initial chat history. Reconnecting the same video preserves its scores; a different video starts at zero.
 - Demo and live scores are separate. Disconnect returns to demo. Live scores are retained for reconnecting.
@@ -37,3 +37,6 @@ Official references: https://developers.google.com/youtube/v3/live/streaming-liv
 Real YouTube ingestion and OBS display require a live stream and local OBS setup and have not yet been verified against this channel.
 
 The optional WebMCP tools expose score readback and demo voting. A supported WebMCP browser was not available for contract verification; ordinary controls do not require WebMCP.
+
+## V2
+Each accepted vote awards 100 points. Existing v1 scores are converted once at load (1 old vote = 100 points). The latest voter sits below the leader; recent votes trigger a 2.6-second gold flag pop and name popup. Like +10 and Subscribe +1,000 banners are informational only and never award points.
