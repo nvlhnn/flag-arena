@@ -3,26 +3,24 @@ import {readFileSync,writeFileSync,mkdirSync,renameSync,existsSync,statSync,crea
 import {resolve,extname,sep} from 'node:path';
 import {initialState,acceptVote,type ArenaState} from '../lib/arena.ts';
 import {videoId,youtube} from './youtube.ts';
+import {createChatSource,consumeChat,applyChatBatch} from './chat-stream.ts';
 const port=Number(process.env.ARENA_PORT||4318),root=resolve('dist'),dataDir=resolve(process.env.ARENA_DATA_DIR||'.arena');
 mkdirSync(dataDir,{recursive:true});const file=resolve(dataDir,'state.json');
 let demo=initialState(),live: ArenaState={...initialState(),mode:'live',status:'Disconnected — scores saved.'},savedVideo='';
 if(existsSync(file)){try{const saved=JSON.parse(readFileSync(file,'utf8'));if(saved.demo?.scores&&saved.live?.scores){demo=saved.demo;live=saved.live;savedVideo=saved.video||'';}}catch{console.error('Saved scores could not be read. The original file is preserved.');process.exit(1);}}
-let state=demo,session:{key:string;chat:string;page?:string;since:number;generation:number}|undefined,timer:NodeJS.Timeout|undefined,generation=0,connecting=false;
+let state=demo,session:{since:number;controller:AbortController;close:()=>void}|undefined,generation=0,connecting=false;
 const clients=new Set<ServerResponse>();
 function persist(){const temporary=file+'.tmp';writeFileSync(temporary,JSON.stringify({demo,live,video:savedVideo}));renameSync(temporary,file);}
 function publish(){if(state.mode==='demo')demo=state;else live=state;persist();const payload=JSON.stringify(state);for(const client of clients)client.write(`data: ${payload}\n\n`);}
-function stop(){generation++;session=undefined;if(timer)clearTimeout(timer);timer=undefined;}
-async function poll(first=false){
- const current=session;if(!current)return;
- try{
-  const params:Record<string,string>={liveChatId:current.chat,part:'id,snippet,authorDetails',maxResults:'2000'};if(current.page)params.pageToken=current.page;
-  const data=await youtube('liveChat/messages',params,current.key);if(session!==current)return;
-  current.page=data.nextPageToken;
-  for(const item of data.items||[]){const time=Date.parse(item.snippet?.publishedAt);if(first||!Number.isFinite(time)||time<current.since||item.snippet?.type!=='textMessageEvent'||!item.authorDetails?.channelId)continue;const result=acceptVote(state,{id:item.id,viewerId:item.authorDetails.channelId,viewer:item.authorDetails.displayName||'Viewer',text:item.snippet.textMessageDetails?.messageText||'',time});if(result.accepted)state=result.state;}
-  state={...state,connected:!data.offlineAt,status:data.offlineAt?'Stream ended. Scores saved.':'Connected — listening for country votes.'};publish();
-  if(data.offlineAt){stop();return;}
-  timer=setTimeout(()=>void poll(),Math.max(1000,data.pollingIntervalMillis||5000));
- }catch(e){if(session!==current)return;stop();state={...state,connected:false,status:(e as Error).message};publish();if(first)throw e;}
+function stop(){generation++;const current=session;session=undefined;current?.controller.abort();current?.close();}
+function beginStreaming(key:string,chat:string){
+ const source=createChatSource(key,chat);
+ const current={since:Date.now(),controller:new AbortController(),close:source.close};session=current;
+ state={...state,connected:false,status:'Connecting to YouTube streaming chat…'};publish();
+ void consumeChat({read:source.read,signal:current.controller.signal,
+  onBatch:batch=>{if(session!==current)return;state=applyChatBatch(state,batch,current.since);publish();},
+  onStatus:(status,connected)=>{if(session!==current)return;if(state.status!==status||state.connected!==connected){state={...state,status,connected};publish();}}
+ }).catch(()=>{if(session===current){state={...state,connected:false,status:'Chat processing failed. Reconnect to resume.'};publish();}}).finally(()=>{source.close();if(session===current)session=undefined;});
 }
 function json(res:ServerResponse,code:number,data:unknown){res.writeHead(code,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(data));}
 createServer(async(req,res)=>{
@@ -42,7 +40,7 @@ createServer(async(req,res)=>{
     if(connecting||session)throw new Error('A connection is already active or in progress.');
     if(typeof body.video!=='string'||typeof body.credential!=='string'||!body.credential.trim())throw new Error('Enter the stream URL and API key.');
     const id=videoId(body.video.trim());connecting=true;const operation=++generation;
-    try{const key=body.credential.trim();const info=await youtube('videos',{id,part:'liveStreamingDetails'},key);const chat=info.items?.[0]?.liveStreamingDetails?.activeLiveChatId;if(!chat)throw new Error('No active live chat found. Start the livestream with live chat enabled, then reconnect.');if(generation!==operation)throw new Error('Connection cancelled.');const previous=state;const previousLive=live;const previousVideo=savedVideo;state=savedVideo===id?{...live,mode:'live'}:{...initialState(),mode:'live'};session={key,chat,since:Date.now(),generation:operation};try{await poll(true);savedVideo=id;publish();}catch(e){state=previous;live=previousLive;savedVideo=previousVideo;publish();throw e;}json(res,200,{ok:true});}finally{connecting=false;}return;
+    try{const key=body.credential.trim();const info=await youtube('videos',{id,part:'liveStreamingDetails'},key);const chat=info.items?.[0]?.liveStreamingDetails?.activeLiveChatId;if(!chat)throw new Error('No active live chat found. Start the livestream with live chat enabled, then reconnect.');if(generation!==operation)throw new Error('Connection cancelled.');state=savedVideo===id?{...live,mode:'live'}:{...initialState(),mode:'live'};savedVideo=id;beginStreaming(key,chat);json(res,200,{ok:true});}finally{connecting=false;}return;
    }
    json(res,404,{error:'Unknown action.'});return;
   }

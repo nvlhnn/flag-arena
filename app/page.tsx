@@ -30,9 +30,9 @@ export default function Home(){
  useEffect(()=>registerArenaTools(()=>({mode:apiRef.current.state.mode,scores:apiRef.current.state.scores}),async(viewer,text)=>{if(apiRef.current.state.mode==='live')throw new Error('Demo votes are disabled in live mode.');return apiRef.current.action('vote',{viewer,text});}),[]);
  const ranked=[...countries].sort((a,b)=>(state.scores[b.code]||0)-(state.scores[a.code]||0)||a.name.localeCompare(b.name));
  const total=Object.values(state.scores).reduce((a,b)=>a+b,0),leader=total?ranked[0]:undefined,latest=state.recent[0],active=ranked.filter(c=>state.scores[c.code]);
- const grid=(total?ranked:countries).slice(0,60),goal=(Math.floor(total/100)+1)*100;
+ const grid=(total?ranked:countries).slice(0,120),goal=(Math.floor(total/100)+1)*100;
  async function vote(e:React.FormEvent){e.preventDefault();try{const r=await action('vote',{viewer,text:message});setNotice(r.accepted?'+1 point! Vote counted.':r.reason);}catch(e){setNotice((e as Error).message);}}
- async function connect(e:React.FormEvent){e.preventDefault();setBusy(true);setRunning(false);try{await action('connect',{video,credential});setCredential('');setNotice('Connected. New chat votes will count from now on.');}catch(e){setNotice((e as Error).message);}finally{setBusy(false);}}
+ async function connect(e:React.FormEvent){e.preventDefault();setBusy(true);setRunning(false);try{await action('connect',{video,credential});setCredential('');setNotice('Stream found. Opening the YouTube chat connection…');}catch(e){setNotice((e as Error).message);}finally{setBusy(false);}}
  const board=<section className="arena" aria-label="Vertical stream scoreboard">
   <div className="arena-top"><span className="mini-brand"><Flag fill="currentColor"/> FLAG ARENA</span><span className="live-pill"><i/>{state.mode==='live'?(state.connected?'YOUTUBE LIVE':'CHAT PAUSED'):'DEMO MODE'}</span></div>
   <div className="arena-title"><span>ONE WORLD. ONE WINNER.</span><h2>REP YOUR<br/><em>COUNTRY.</em></h2><p>Type your country in chat to vote</p></div>

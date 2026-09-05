@@ -17,7 +17,7 @@ The hosted private preview is demo-only. Use the local app for YouTube and OBS: 
 - One country name (English), supported alias, flag emoji, or `!vote ID` gives one point.
 - One accepted vote per YouTube channel ID every 10 seconds, across all countries.
 - Multiple different countries, ordinary chat and paid events are ignored. Repeating a flag in one message still gives only one point.
-- All ISO-listed countries/territories can receive votes. The overlay shows the leading 60; unranked ties sort alphabetically.
+- All ISO-listed countries/territories can receive votes. The overlay shows the leading 120; unranked ties sort alphabetically.
 - New connections skip initial chat history. Reconnecting the same video preserves its scores; a different video starts at zero.
 - Demo and live scores are separate. Disconnect returns to demo. Live scores are retained for reconnecting.
 - Scores are saved in `.arena/state.json`. Reset requires confirmation; it preserves cooldowns and duplicate tracking. Reset during a stream starts counting from that moment.
@@ -26,9 +26,9 @@ The hosted private preview is demo-only. Use the local app for YouTube and OBS: 
 
 Create a Google Cloud project, enable **YouTube Data API v3**, and create an API key restricted to that API. Enter it in the local app, never in a public chat or screenshot. A public or accessible unlisted stream must have an active live chat. Private streams may require OAuth, which this version does not implement.
 
-The reader uses YouTube's documented paginated `liveChatMessages.list` endpoint and respects `pollingIntervalMillis`. API quotas apply and polling can exhaust a daily quota; monitor your Google Cloud quota before a long broadcast. Google recommends `streamList` for more efficient continuous delivery; this first version implements the simpler polling reader. API or network failures stop the reader and appear in the control panel; reconnect to resume. Messages sent while disconnected may be skipped.
+The reader uses YouTube’s `liveChatMessages.streamList` over a TLS-protected gRPC connection. It resumes with the latest `nextPageToken` after temporary network failures, with retries spaced from 2 seconds up to 60 seconds. Initial history older than the connection time is ignored, while replayed accepted messages remain protected by duplicate tracking. Ended chats, invalid credentials, and quota/rate-limit errors stop the reader and appear in the control panel. Quotas still apply; streaming does not guarantee unlimited or 24/7 access. Restarting the app requires entering the key again and reconnecting; keys are not saved.
 
-Official references: https://developers.google.com/youtube/v3/live/docs/liveChatMessages/list and https://developers.google.com/youtube/v3/docs/videos#liveStreamingDetails.activeLiveChatId
+Official references: https://developers.google.com/youtube/v3/live/streaming-live-chat and https://developers.google.com/youtube/v3/docs/videos#liveStreamingDetails.activeLiveChatId
 
 ## Development
 
