@@ -39,4 +39,4 @@ Real YouTube ingestion and OBS display require a live stream and local OBS setup
 The optional WebMCP tools expose score readback and demo voting. A supported WebMCP browser was not available for contract verification; ordinary controls do not require WebMCP.
 
 ## V2
-Each accepted vote awards 100 points. Existing v1 scores are converted once at load (1 old vote = 100 points). The latest voter sits below the leader; recent votes trigger a 2.6-second gold flag pop and name popup. Like +10 and Subscribe +1,000 banners are informational only and never award points.
+Each accepted vote awards 100 points. Existing v1 scores are converted once at load (1 old vote = 100 points). The latest voter sits below the leader; recent votes trigger a 1.6-second gold glow without enlargement and 2.6-second name-only popup. Like +500 and Subscribe +1,000 banners are informational only and never award points.
