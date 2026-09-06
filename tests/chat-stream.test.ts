@@ -26,12 +26,25 @@ test('protobuf contract uses official service path and round-trips message field
  const request={liveChatId:'chat-id',pageToken:'cursor',part:['id','snippet','authorDetails'],maxResults:2000};assert.deepEqual(rpc.requestDeserialize(rpc.requestSerialize(request)),request);
  const batch:ChatBatch={nextPageToken:'next',items:[message('id',1000)]};assert.deepEqual(rpc.responseDeserialize(rpc.responseSerialize(batch)),batch);
 });
-test('short successful streams do not reset backoff and stop at attempt limit',async()=>{
- let attempts=0;const waits:number[]=[],statuses:string[]=[];
- await consumeChat({signal:new AbortController().signal,now:()=>1000,async *read(){attempts++;yield {nextPageToken:'cursor',items:[]};},onBatch:()=>{},onStatus:s=>statuses.push(s),wait:async ms=>{waits.push(ms);}});
- assert.equal(attempts,8);
- assert.deepEqual(waits,[2000,4000,8000,16000,32000,60000,60000,60000]);
- assert.match(statuses.at(-1)!,/8 connection attempts/);
+test('normal endings resume beyond eight attempts without failure backoff',async()=>{
+ let attempts=0;const waits:number[]=[];const controller=new AbortController();
+ await consumeChat({signal:controller.signal,now:()=>1000,async *read(){attempts++;yield {nextPageToken:'cursor',items:[]};if(attempts===10)controller.abort();},onBatch:()=>{},onStatus:()=>{},wait:async ms=>{waits.push(ms);}});
+ assert.equal(attempts,10);assert.ok(waits.every(ms=>ms===2000));
+});
+test('persisted budget refusal stops before a request is made',async()=>{
+ let calls=0;const statuses:string[]=[];
+ await consumeChat({signal:new AbortController().signal,beforeAttempt:()=>{throw new Error('Budget exhausted');},async *read(){calls++;},onBatch:()=>{},onStatus:s=>statuses.push(s)});
+ assert.equal(calls,0);assert.match(statuses.at(-1)!,/saved request budget/);
+});
+test('restart uses saved cursor and can accept votes from the disconnected interval',async()=>{
+ let state=initialState();const controller=new AbortController();
+ await consumeChat({initialPage:'saved-cursor',signal:controller.signal,async *read(page){assert.equal(page,'saved-cursor');yield {items:[message('during-downtime',11000)],offlineAt:'ended'};},onBatch:b=>{state=applyChatBatch(state,b,1000);},onStatus:()=>{}});
+ assert.equal(state.scores.ID,100);
+});
+test('an invalid saved cursor is cleared instead of trapping every reconnect',async()=>{
+ let cleared=false;const statuses:string[]=[];
+ await consumeChat({initialPage:'expired',signal:new AbortController().signal,async *read(){throw Object.assign(new Error('invalid token'),{code:3});},onBatch:()=>{},onInvalidPage:()=>{cleared=true;},onStatus:s=>statuses.push(s)});
+ assert.equal(cleared,true);assert.match(statuses.at(-1)!,/older votes may be unavailable/);
 });
 test('only a stable stream resets retry delay; diagnostics exclude raw error text',async()=>{
  let time=0,calls=0;const waits:number[]=[],events:unknown[]=[];const controller=new AbortController();

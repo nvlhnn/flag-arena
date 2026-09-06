@@ -46,3 +46,15 @@ Each accepted vote awards 100 points. Existing v1 scores are converted once at l
 Open `http://127.0.0.1:4318/api/diagnostics` for local request-attempt counts, received batches/messages, and the last 100 connection events. Counts persist in `.arena/youtube-diagnostics.json`; they are not Google quota units and cannot reconstruct past usage. Keys, chat text, viewer identities and resume tokens are not logged.
 
 Automatic reconnect backoff resets only after a stream has stayed open for at least 30 seconds. At most 8 stream attempts are made within 10 minutes per connection session before stopping for manual inspection. Quota errors stop immediately.
+
+
+### Connection recovery and request budget
+
+The local control panel shows Chat health and links to `/api/diagnostics`.
+Normal stream endings resume after a short delay; transient failures use exponential backoff and stop after eight consecutive failures. Scores and the resume token are saved together, allowing reconnection to the same chat after a restart. Resetting live scores also updates the history cutoff. Expired/rejected resume tokens are cleared and reported; recovery of older messages is not guaranteed.
+
+`request-budget.json` reserves an estimated 5 units per stream request and 1 per video lookup, with a conservative 9,000-unit limit over a rolling 24 hours. The stream cost is an estimate inferred from observed usage, not an authoritative Google quota measurement. This tracks only this app's requests after the update, excludes other clients and earlier usage, and cannot restore an exhausted Google quota. Reservations survive restarts and manual reconnects. A corrupt budget file blocks new requests rather than silently resetting the counter.
+
+State writes retain a previous-file backup; startup recovers from that backup if the main score file is unreadable and preserves the damaged file. Local API credentials are still memory-only and must be entered after restarting. Back up the `.arena` directory; it contains private chat state and resume tokens and must not be published.
+
+Voter popups use an ordered, bounded queue (100 pending effects). Under a large burst some popups may be omitted, but accepted votes still count. The latest 500 votes are retained for display recovery. Likes and subscriptions remain informational and do not award points.

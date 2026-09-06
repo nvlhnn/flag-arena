@@ -23,7 +23,7 @@ export function acceptVote(state:ArenaState,vote:Vote):{accepted:boolean;reason:
  const code=parseCountry(vote.text);if(!code)return{accepted:false,reason:'Send one country name, flag emoji, or !vote followed by its two-letter code.',state};
  const last=state.cooldowns[vote.viewerId];if(last!==undefined&&vote.time-last<10000)return{accepted:false,reason:`Wait ${Math.max(1,Math.ceil((10000-(vote.time-last))/1000))} seconds before voting again.`,state};
  const cooldowns=Object.fromEntries(Object.entries(state.cooldowns).filter(([,t])=>vote.time-t<10000));
- return{accepted:true,reason:'Vote counted.',state:{...state,scores:{...state.scores,[code]:(state.scores[code]||0)+POINTS_PER_VOTE},recent:[{...vote,viewer:vote.viewer.slice(0,60),code},...state.recent].slice(0,30),cooldowns:{...cooldowns,[vote.viewerId]:vote.time},seen:[...state.seen,vote.id].slice(-10000)}};
+ return{accepted:true,reason:'Vote counted.',state:{...state,scores:{...state.scores,[code]:(state.scores[code]||0)+POINTS_PER_VOTE},recent:[{...vote,viewer:vote.viewer.slice(0,60),code},...state.recent].slice(0,500),cooldowns:{...cooldowns,[vote.viewerId]:vote.time},seen:[...state.seen,vote.id].slice(-10000)}};
 }
 
 export function migrateScores(state:ArenaState):ArenaState {
