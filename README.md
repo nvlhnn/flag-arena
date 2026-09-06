@@ -40,3 +40,9 @@ The optional WebMCP tools expose score readback and demo voting. A supported Web
 
 ## V2
 Each accepted vote awards 100 points. Existing v1 scores are converted once at load (1 old vote = 100 points). The latest voter sits below the leader; recent votes trigger a 1.6-second gold glow without enlargement and 2.6-second name-only popup. Like +500 and Subscribe +1,000 banners are informational only and never award points.
+
+## YouTube request diagnostics
+
+Open `http://127.0.0.1:4318/api/diagnostics` for local request-attempt counts, received batches/messages, and the last 100 connection events. Counts persist in `.arena/youtube-diagnostics.json`; they are not Google quota units and cannot reconstruct past usage. Keys, chat text, viewer identities and resume tokens are not logged.
+
+Automatic reconnect backoff resets only after a stream has stayed open for at least 30 seconds. At most 8 stream attempts are made within 10 minutes per connection session before stopping for manual inspection. Quota errors stop immediately.

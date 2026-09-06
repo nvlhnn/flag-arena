@@ -4,8 +4,10 @@ import {resolve,extname,sep} from 'node:path';
 import {initialState,acceptVote,migrateScores,type ArenaState} from '../lib/arena.ts';
 import {videoId,youtube} from './youtube.ts';
 import {createChatSource,consumeChat,applyChatBatch} from './chat-stream.ts';
+import {createDiagnostics} from './diagnostics.ts';
 const port=Number(process.env.ARENA_PORT||4318),root=resolve('dist'),dataDir=resolve(process.env.ARENA_DATA_DIR||'.arena');
 mkdirSync(dataDir,{recursive:true});const file=resolve(dataDir,'state.json');
+const diagnostics=createDiagnostics(dataDir);
 let demo=initialState(),live: ArenaState={...initialState(),mode:'live',status:'Disconnected — scores saved.'},savedVideo='';
 if(existsSync(file)){try{const saved=JSON.parse(readFileSync(file,'utf8'));if(saved.demo?.scores&&saved.live?.scores){demo=migrateScores(saved.demo);live=migrateScores(saved.live);savedVideo=saved.video||'';}}catch{console.error('Saved scores could not be read. The original file is preserved.');process.exit(1);}}
 let state=demo,session:{since:number;controller:AbortController;close:()=>void}|undefined,generation=0,connecting=false;
@@ -17,7 +19,7 @@ function beginStreaming(key:string,chat:string){
  const source=createChatSource(key,chat);
  const current={since:Date.now(),controller:new AbortController(),close:source.close};session=current;
  state={...state,connected:false,status:'Connecting to YouTube streaming chat…'};publish();
- void consumeChat({read:source.read,signal:current.controller.signal,
+ void consumeChat({read:source.read,signal:current.controller.signal,diagnostic:diagnostics.record,
   onBatch:batch=>{if(session!==current)return;state=applyChatBatch(state,batch,current.since);publish();},
   onStatus:(status,connected)=>{if(session!==current)return;if(state.status!==status||state.connected!==connected){state={...state,status,connected};publish();}}
  }).catch(()=>{if(session===current){state={...state,connected:false,status:'Chat processing failed. Reconnect to resume.'};publish();}}).finally(()=>{source.close();if(session===current)session=undefined;});
@@ -29,6 +31,7 @@ createServer(async(req,res)=>{
   const url=new URL(req.url||'/',`http://${host}`);
   if(req.method==='GET'&&url.pathname==='/api/events'){res.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive','X-Accel-Buffering':'no'});res.write(`data: ${JSON.stringify(state)}\n\n`);clients.add(res);const heartbeat=setInterval(()=>res.write(': keepalive\n\n'),15000);req.on('close',()=>{clearInterval(heartbeat);clients.delete(res);});return;}
   if(req.method==='GET'&&url.pathname==='/api/state'){json(res,200,state);return;}
+  if(req.method==='GET'&&url.pathname==='/api/diagnostics'){json(res,200,diagnostics.read());return;}
   if(req.method==='POST'&&url.pathname.startsWith('/api/')){
    const origin=req.headers.origin;if(origin&&!['http://127.0.0.1:3000','http://localhost:3000',`http://127.0.0.1:${port}`,`http://localhost:${port}`].includes(origin)){json(res,403,{error:'This origin cannot control the arena.'});return;}
    if(!req.headers['content-type']?.startsWith('application/json')){json(res,415,{error:'JSON required.'});return;}
@@ -40,7 +43,7 @@ createServer(async(req,res)=>{
     if(connecting||session)throw new Error('A connection is already active or in progress.');
     if(typeof body.video!=='string'||typeof body.credential!=='string'||!body.credential.trim())throw new Error('Enter the stream URL and API key.');
     const id=videoId(body.video.trim());connecting=true;const operation=++generation;
-    try{const key=body.credential.trim();const info=await youtube('videos',{id,part:'liveStreamingDetails'},key);const chat=info.items?.[0]?.liveStreamingDetails?.activeLiveChatId;if(!chat)throw new Error('No active live chat found. Start the livestream with live chat enabled, then reconnect.');if(generation!==operation)throw new Error('Connection cancelled.');state=savedVideo===id?{...live,mode:'live'}:{...initialState(),mode:'live'};savedVideo=id;beginStreaming(key,chat);json(res,200,{ok:true});}finally{connecting=false;}return;
+    try{const key=body.credential.trim();diagnostics.record({event:'video_lookup'});const info=await youtube('videos',{id,part:'liveStreamingDetails'},key).catch(error=>{diagnostics.record({event:'video_lookup_error'});throw error;});const chat=info.items?.[0]?.liveStreamingDetails?.activeLiveChatId;if(!chat)throw new Error('No active live chat found. Start the livestream with live chat enabled, then reconnect.');if(generation!==operation)throw new Error('Connection cancelled.');state=savedVideo===id?{...live,mode:'live'}:{...initialState(),mode:'live'};savedVideo=id;beginStreaming(key,chat);json(res,200,{ok:true});}finally{connecting=false;}return;
    }
    json(res,404,{error:'Unknown action.'});return;
   }

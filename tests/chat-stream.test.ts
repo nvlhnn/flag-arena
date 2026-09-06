@@ -26,3 +26,15 @@ test('protobuf contract uses official service path and round-trips message field
  const request={liveChatId:'chat-id',pageToken:'cursor',part:['id','snippet','authorDetails'],maxResults:2000};assert.deepEqual(rpc.requestDeserialize(rpc.requestSerialize(request)),request);
  const batch:ChatBatch={nextPageToken:'next',items:[message('id',1000)]};assert.deepEqual(rpc.responseDeserialize(rpc.responseSerialize(batch)),batch);
 });
+test('short successful streams do not reset backoff and stop at attempt limit',async()=>{
+ let attempts=0;const waits:number[]=[],statuses:string[]=[];
+ await consumeChat({signal:new AbortController().signal,now:()=>1000,async *read(){attempts++;yield {nextPageToken:'cursor',items:[]};},onBatch:()=>{},onStatus:s=>statuses.push(s),wait:async ms=>{waits.push(ms);}});
+ assert.equal(attempts,8);
+ assert.deepEqual(waits,[2000,4000,8000,16000,32000,60000,60000,60000]);
+ assert.match(statuses.at(-1)!,/8 connection attempts/);
+});
+test('only a stable stream resets retry delay; diagnostics exclude raw error text',async()=>{
+ let time=0,calls=0;const waits:number[]=[],events:unknown[]=[];const controller=new AbortController();
+ await consumeChat({signal:controller.signal,now:()=>time,diagnostic:e=>events.push(e),async *read(){calls++;if(calls===3)time+=31000;yield {nextPageToken:'secret-cursor'};throw Object.assign(new Error('secret-key'),{code:14});},onBatch:()=>{},onStatus:()=>{},wait:async ms=>{waits.push(ms);time+=ms;if(calls===3)controller.abort();}});
+ assert.deepEqual(waits,[2000,4000,2000]);assert.doesNotMatch(JSON.stringify(events),/secret/);
+});
