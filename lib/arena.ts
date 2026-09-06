@@ -5,7 +5,8 @@ const favorites=['ID','IN','US','BR','PH','MX','TR','DE','GB','FR','JP','KR','AR
 export const countries=Object.entries(iso.getNames('en',{select:'official'})).map(([code,name])=>({code,name})).sort((a,b)=>{const ai=favorites.indexOf(a.code),bi=favorites.indexOf(b.code);return(ai<0?999:ai)-(bi<0?999:bi)||a.name.localeCompare(b.name);});
 export type Vote={id:string;viewerId:string;viewer:string;text:string;time:number};
 export const POINTS_PER_VOTE=100;
-export type ArenaState={scoreVersion?:2;mode:'demo'|'live';connected?:boolean;status:string;scores:Record<string,number>;recent:(Vote&{code:string})[];cooldowns:Record<string,number>;seen:string[]};
+export type Match={phase:'open'|'countdown'|'results';openedAt?:number;endsAt?:number;results?:{code:string;name:string;points:number}[]};
+export type ArenaState={match?:Match;scoreVersion?:2;mode:'demo'|'live';connected?:boolean;status:string;scores:Record<string,number>;recent:(Vote&{code:string})[];cooldowns:Record<string,number>;seen:string[]};
 export const initialState=():ArenaState=>({scoreVersion:2,mode:'demo',status:'Ready for a demo. YouTube is not connected.',scores:{},recent:[],cooldowns:{},seen:[]});
 const normalize=(s:string)=>s.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
 const aliases=new Map<string,string>();
@@ -18,7 +19,9 @@ export function parseCountry(text:string):string|undefined{
  const candidates=new Set([...flags,...(word?[word]:[])]);if(candidates.size!==1)return undefined;
  const code=[...candidates][0];return countries.some(c=>c.code===code)?code:undefined;
 }
-export function acceptVote(state:ArenaState,vote:Vote):{accepted:boolean;reason:string;state:ArenaState}{
+export function acceptVote(state:ArenaState,vote:Vote,now=Date.now()):{accepted:boolean;reason:string;state:ArenaState}{
+ if(state.match?.phase==='results'||(state.match?.endsAt!==undefined&&now>=state.match.endsAt))return{accepted:false,reason:'Match finished. Voting is closed.',state};
+ if(state.match?.openedAt!==undefined&&vote.time<state.match.openedAt)return{accepted:false,reason:'Message belongs to an earlier match.',state};
  if(state.seen.includes(vote.id))return{accepted:false,reason:'This message was already processed.',state};
  const code=parseCountry(vote.text);if(!code)return{accepted:false,reason:'Send one country name, flag emoji, or !vote followed by its two-letter code.',state};
  const last=state.cooldowns[vote.viewerId];if(last!==undefined&&vote.time-last<10000)return{accepted:false,reason:`Wait ${Math.max(1,Math.ceil((10000-(vote.time-last))/1000))} seconds before voting again.`,state};

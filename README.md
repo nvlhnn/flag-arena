@@ -58,3 +58,10 @@ Normal stream endings resume after a short delay; transient failures use exponen
 State writes retain a previous-file backup; startup recovers from that backup if the main score file is unreadable and preserves the damaged file. Local API credentials are still memory-only and must be entered after restarting. Back up the `.arena` directory; it contains private chat state and resume tokens and must not be published.
 
 Voter popups use an ordered, bounded queue (100 pending effects). Under a large burst some popups may be omitted, but accepted votes still count. The latest 500 votes are retained for display recovery. Likes and subscriptions remain informational and do not award points.
+
+
+### Match finale
+
+Use **Finish match · 10s countdown** in Match controls. Votes received before the deadline count; at zero the server freezes scores and reveals up to five countries with nonzero scores, from fifth place to first. Ties use country-name alphabetical order. Late-delivered messages do not change published results.
+
+Results stay on screen until **New match — reset scores** or **Continue — keep scores** is selected. Both reopen voting, clear old popup activity, and reject delayed messages from before the new round. Duplicate and cooldown protections stay in place. Countdown deadlines and final results are persisted and shared with the OBS overlay. The local server must stay running for live updates; restarting requires re-entering the YouTube API key.
