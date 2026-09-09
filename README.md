@@ -20,7 +20,7 @@ The hosted private preview is demo-only. Use the local app for YouTube and OBS: 
 - All ISO-listed countries/territories can receive votes. The overlay shows the leading 120; unranked ties sort alphabetically.
 - New connections skip initial chat history. Reconnecting the same video preserves its scores; a different video starts at zero.
 - Demo and live scores are separate. Disconnect returns to demo. Live scores are retained for reconnecting.
-- Scores are saved in `.arena/state.json`. Reset requires confirmation; it preserves duplicate tracking. Reset during a stream starts counting from that moment.
+- Scores are saved in the local SQLite database (see Storage and analytics below). Reset requires confirmation; it preserves duplicate tracking. Reset during a stream starts counting from that moment.
 
 ## YouTube setup and limits
 
@@ -55,7 +55,7 @@ Normal stream endings resume after a short delay; transient failures use exponen
 
 `request-budget.json` reserves an estimated 5 units per stream request and 1 per video lookup, with an advisory 9,000-unit warning over a rolling 24 hours. The stream cost is an estimate inferred from observed usage, not an authoritative Google quota measurement. This tracks only this app's requests after the update, excludes other clients and earlier usage, and cannot restore an exhausted Google quota. The estimate does not block requests; Google quota errors advance to the next configured chat key, stopping after all keys fail. Reservations survive restarts and manual reconnects. A corrupt budget file blocks new requests rather than silently resetting the counter.
 
-State writes retain a previous-file backup; startup recovers from that backup if the main score file is unreadable and preserves the damaged file. Local API credentials are still memory-only and must be entered after restarting. Back up the `.arena` directory; it contains private chat state and resume tokens and must not be published.
+Legacy JSON migration can recover from the previous-file backup and preserves the damaged file. New state writes use SQLite transactions. Local API credentials are still memory-only and must be entered after restarting. Back up the `.arena` directory; it contains private chat state and resume tokens and must not be published.
 
 Voter popups use an ordered, bounded queue (100 pending effects). Under a large burst some popups may be omitted, but accepted votes still count. The latest 500 votes are retained for display recovery. Likes and subscriptions remain informational and do not award points.
 
@@ -103,3 +103,23 @@ Accepted country votes earn one XP at most once per five seconds per YouTube cha
 Performance: chat batches use a Set for duplicate checks and count accepted votes directly. Overlay broadcasts coalesce over 100ms. Score and XP snapshots remain immediately durable; unchanged subscriber checks skip state writes. Diagnostic counters save at most once per second (a hard crash may lose the last second of diagnostics, not saved scores). Ranking speech has a six-item queue and drops items older than eight seconds.
 
 Chat key fallback: configured keys are attempted in priority order on authentication and quota/rate-limit errors, including gRPC code 8. Each key is tried once per connection attempt, with the latest chat cursor retained. No wraparound occurs after exhaustion. Subscriber OAuth is unchanged.
+
+
+## Storage and stream analytics
+
+The local service now stores scores, viewer progress, stream checkpoints, accepted chat votes and Super Chats in SQLite. On Windows the default database is `%LOCALAPPDATA%/FlagArena/arena.sqlite`, outside the OneDrive project folder. `ARENA_DATA_DIR` overrides the storage directory for isolated installations and tests. OAuth credentials, request diagnostics and quota accounting retain their existing `.arena` files. The database and `.arena` contain private viewer information; neither belongs in Git.
+
+On the first run, `.arena/state.json` is imported automatically if no saved database state exists. The JSON and backup are retained unchanged. Scores, XP, audio settings, subscriber ledger and resume positions are preserved. Only the retained recent votes can seed legacy stream analytics; these streams are marked **partial**. Earlier votes and donations cannot be reconstructed. After migration, the database is authoritative: changing the old JSON has no effect. Restart the server and refresh the studio/OBS browser source after updating.
+
+Use **Analytics** in the studio. Select the current/last stream or a previously recorded stream. Totals belong to a YouTube video ID and survive new matches, scoreboard resets, reconnection and app restarts. Demo votes are excluded. New streams only record events delivered after tracking begins; this is not a retrospective YouTube revenue report.
+
+- **Top 5 chat voters:** total accepted chat-vote points; subscriber awards and donations never add to this ranking. Shared ranks use standard competition ranking (1, 1, 3). The list displays at most five viewers with stable viewer-ID ordering at the cutoff. A viewer's country is their most frequently voted country in this stream; ties use the most recent vote, then country code for identical timestamps.
+- **All donors and donation history:** paginated lists include every recorded Super Chat, original integer micros/currency/comment, donor totals and USD conversion status. Super Stickers and other paid event types are not included in this Super Chat report.
+- **Country Super Chat totals:** each donation is locked to the donor's most-voted country at its event timestamp. With no earlier accepted country vote, it stays **Unassigned** until the next accepted country vote in the same stream. Later country changes do not reassign a locked donation. Unassigned totals remain visible.
+- **USD:** daily historical reference rates come from [Frankfurter](https://frankfurter.dev/). Requests contain only currency codes and the donation date. Original purchases, conversion rate, rate date and conversion timestamp are stored. USD amounts use integer micros with decimal-rate multiplication and one rounding step. Conversion failures remain pending and retry after five minutes; supported conversions never block chat processing. These are gross purchase estimates, not creator payout amounts after YouTube fees or refunds.
+
+The service commits an ingestion batch's accepted votes, donations, score changes and resume position in one transaction. SQLite uses WAL with FULL synchronization. Viewer XP is stored in separate rows; live ingestion clones working collections once per batch instead of once per vote. The database enforces unique stream/message IDs after the rolling visual buffer has expired. SSE sends new recent votes with compact scoreboard state around every 100 ms; analytics refreshes independently every three seconds only while open. Animations remain bounded and cannot change score accounting. Analytics metric transitions respect reduced-motion preferences.
+
+Back up the database after stopping the local service, or use SQLite's supported online backup mechanism. Do not copy just the main database file while it is running: committed updates may still be in its WAL file. Keep the active database local rather than synchronizing a live database through OneDrive.
+
+Validation: `npm test`, `npx tsc --noEmit`, `npm run build`. Run `node --import tsx scripts/benchmark-processing.ts` for an isolated synthetic benchmark: 144,000 historical votes across 5,000 viewers, then 5 messages/second for a minute and a 50 messages/second burst. It reports transaction latency and checks stored event counts and durable duplicate protection. This does not measure YouTube delivery latency or OBS/browser rendering. Real paid-event ingestion and OBS audio/animation behavior still require a live-channel check.

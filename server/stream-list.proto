@@ -29,5 +29,13 @@ message LiveChatMessageSnippet {
   optional int32 type = 1;
   optional string published_at = 4;
   optional LiveChatTextMessageDetails text_message_details = 19;
+  optional LiveChatSuperChatDetails super_chat_details = 27;
 }
 message LiveChatTextMessageDetails { optional string message_text = 1; }
+message LiveChatSuperChatDetails {
+  optional uint64 amount_micros = 1;
+  optional string currency = 2;
+  optional string amount_display_string = 3;
+  optional string user_comment = 4;
+  optional uint32 tier = 5;
+}

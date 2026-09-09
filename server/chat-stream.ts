@@ -3,8 +3,8 @@ import {loadSync} from '@grpc/proto-loader';
 import {fileURLToPath} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
 import {acceptVote,type ArenaState} from '../lib/arena.ts';
-export const definition=loadSync(fileURLToPath(new URL('./stream-list.proto',import.meta.url)),{defaults:false});
-export type ChatBatch={nextPageToken?:string;offlineAt?:string;items?:{id?:string;snippet?:{type?:number;publishedAt?:string;textMessageDetails?:{messageText?:string}};authorDetails?:{channelId?:string;displayName?:string}}[]};
+export const definition=loadSync(fileURLToPath(new URL('./stream-list.proto',import.meta.url)),{defaults:false,longs:String});
+export type ChatBatch={nextPageToken?:string;offlineAt?:string;items?:{id?:string;snippet?:{type?:number;publishedAt?:string;textMessageDetails?:{messageText?:string};superChatDetails?:{amountMicros?:string;currency?:string;userComment?:string}};authorDetails?:{channelId?:string;displayName?:string}}[]};
 type StreamClient=grpc.Client & {streamList:(request:object,metadata:grpc.Metadata)=>grpc.ClientReadableStream<ChatBatch>};
 const service=grpc.loadPackageDefinition(definition) as unknown as {youtube:{api:{v3:{V3DataLiveChatMessageService:new(target:string,credentials:grpc.ChannelCredentials)=>StreamClient}}}};
 export function createChatSource(key:string,chat:string){

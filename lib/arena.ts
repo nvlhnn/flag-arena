@@ -6,7 +6,7 @@ iso.registerLocale(english);
 const favorites=['ID','IN','US','BR','PH','MX','TR','DE','GB','FR','JP','KR','AR','CA','PK','BD','VN','TH','MY','AU','ES','IT','PT','NL','SA','EG','ZA','NG','MA','DZ','IR','IQ','UA','PL','RU','CN','NP','LK','NO','SE','FI','DK','CH','BE','GR','RO','CL','CO','PE','EC','VE','KE','GH','ET','TZ','SG','NZ','IE','IL','PS'];
 export const countries=Object.entries(iso.getNames('en',{select:'official'})).map(([code,name])=>({code,name})).sort((a,b)=>{const ai=favorites.indexOf(a.code),bi=favorites.indexOf(b.code);return(ai<0?999:ai)-(bi<0?999:bi)||a.name.localeCompare(b.name);});
 export const levelForXp=(xp:number)=>xp>=360?5:xp>=240?4:xp>=120?3:xp>=40?2:1;
-export type ViewerProgress={xp:number;lastXpAt:number};
+export type ViewerProgress={xp:number;lastXpAt:number;lastCountry?:string;lastVoteAt?:number};
 export type Vote={level?:number;points?:number;levelUp?:boolean;id:string;viewerId:string;viewer:string;text:string;time:number};
 export const POINTS_PER_VOTE=1;
 export type Match={phase:'open'|'countdown'|'results';openedAt?:number;endsAt?:number;results?:{code:string;name:string;points:number}[]};
@@ -23,7 +23,7 @@ export function parseCountry(text:string):string|undefined{
  const candidates=new Set([...flags,...(word?[word]:[])]);if(candidates.size!==1)return undefined;
  const code=[...candidates][0];return countries.some(c=>c.code===code)?code:undefined;
 }
-export function acceptVote(state:ArenaState,vote:Vote,now=Date.now(),seenIds?:ReadonlySet<string>):{accepted:boolean;reason:string;state:ArenaState}{
+export function acceptVote(state:ArenaState,vote:Vote,now=Date.now(),seenIds?:ReadonlySet<string>,owned=false):{accepted:boolean;reason:string;state:ArenaState}{
  if(state.match?.phase==='results'||(state.match?.endsAt!==undefined&&now>=state.match.endsAt))return{accepted:false,reason:'Match finished. Voting is closed.',state};
  if(state.match?.openedAt!==undefined&&vote.time<state.match.openedAt)return{accepted:false,reason:'Message belongs to an earlier match.',state};
  if(seenIds?seenIds.has(vote.id):state.seen.includes(vote.id))return{accepted:false,reason:'This message was already processed.',state};
@@ -31,10 +31,17 @@ export function acceptVote(state:ArenaState,vote:Vote,now=Date.now(),seenIds?:Re
  const previous=state.viewers?.[vote.viewerId];
  const xp=previous?.xp??0,points=levelForXp(xp);
  const earnsXp=!previous||vote.time-previous.lastXpAt>=5000;
- const progress={xp:Math.min(360,xp+(earnsXp?1:0)),lastXpAt:earnsXp?vote.time:previous.lastXpAt};
+ const progress={xp:Math.min(360,xp+(earnsXp?1:0)),lastXpAt:earnsXp?vote.time:previous.lastXpAt,lastCountry:vote.time>=(previous?.lastVoteAt??0)?code:previous?.lastCountry,lastVoteAt:Math.max(vote.time,previous?.lastVoteAt??0)};
  const level=levelForXp(progress.xp);
- return{accepted:true,reason:'Vote counted.',state:{...state,viewers:{...state.viewers,[vote.viewerId]:progress},scores:{...state.scores,[code]:(state.scores[code]||0)+points},recent:[{...vote,viewer:vote.viewer.slice(0,60),code,points,level,levelUp:level>points},...state.recent].slice(0,500),cooldowns:{},seen:[...state.seen,vote.id].slice(-10000)}};
+ const next=owned?state:{...state,viewers:{...state.viewers},scores:{...state.scores},recent:[...state.recent],seen:[...state.seen],cooldowns:{}};
+ (next.viewers??={})[vote.viewerId]=progress;next.scores[code]=(next.scores[code]||0)+points;
+ next.recent.unshift({...vote,viewer:vote.viewer.slice(0,60),code,points,level,levelUp:level>points});if(next.recent.length>500)next.recent.length=500;
+ next.seen.push(vote.id);if(next.seen.length>10000)next.seen.shift();
+ return{accepted:true,reason:'Vote counted.',state:next};
 }
+
+// A batch owns these collections; the caller's snapshot stays immutable.
+export function copyForBatch(state:ArenaState):ArenaState{return {...state,viewers:{...state.viewers},scores:{...state.scores},recent:[...state.recent],seen:[...state.seen],cooldowns:{}};}
 
 export function migrateScores(state:ArenaState):ArenaState {
  if(state.scoreVersion===2)return state;
