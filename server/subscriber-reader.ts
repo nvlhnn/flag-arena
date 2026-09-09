@@ -15,11 +15,13 @@ export async function readSubscribers(token:string,reserve:()=>void,ledger?:Subs
  const records:Subscriber[]=[];let page='';
  for(let count=0;count<10;count++){
   const data=await subscriberRequest('subscriptions',{part:'snippet,subscriberSnippet',myRecentSubscribers:'true',maxResults:'50',...(page?{pageToken:page}:{})},token,reserve);
-  for(const item of data.items||[]){const id=item.subscriberSnippet?.channelId,name=item.subscriberSnippet?.title,time=Date.parse(item.snippet?.publishedAt||'');if(typeof id==='string'&&typeof name==='string')records.push({id,name,publishedAt:time});}
+  const pageRecords:Subscriber[]=[];
+  for(const item of data.items||[]){const id=item.subscriberSnippet?.channelId,name=item.subscriberSnippet?.title,time=Date.parse(item.snippet?.publishedAt||'');if(typeof id==='string'&&typeof name==='string')pageRecords.push({id,name,publishedAt:time});}
+  records.push(...pageRecords);
   page=data.nextPageToken;
-  // Once a page overlaps our previous snapshot, older pages cannot contain a
-  // newly created subscription. First setup uses the current time as baseline.
-  if(!page||!ledger||records.length>0&&records.every(record=>Object.hasOwn(ledger.known,record.id)||record.publishedAt<ledger.baselineAt))return records;
+  // Stop on a fully known/older page, but continue through mixed pages.
+  // Earlier new subscribers must not prevent this page from ending the scan.
+  if(!page||!ledger||pageRecords.length>0&&pageRecords.every(record=>Object.hasOwn(ledger.known,record.id)||record.publishedAt<ledger.baselineAt))return records;
  }
  throw new Error('Subscriber list exceeded 500 entries. Tracking paused to protect quota; narrow the polling strategy before resuming.');
 }
