@@ -1,7 +1,13 @@
 import type {ArenaState} from './arena';
 export type Subscriber={id:string;name:string;publishedAt:number};
 export type SubscriberAlert={id:string;viewer:string;code?:string;points:number;startsAt:number};
-export type SubscriberLedger={scanJobs?:{page:string;full?:boolean}[];ownerId:string;baselineAt:number;initialized?:boolean;known:Record<string,number>;pending:Record<string,{name:string;round:number}>};
+export type SubscriberLedger={streamId?:string;scanJobs?:{page:string;full?:boolean}[];ownerId:string;baselineAt:number;initialized?:boolean;known:Record<string,number>;pending:Record<string,{name:string;round:number}>};
+// Keep one active stream's subscriber ledger; never archive old subscriber lists.
+export function subscriberLedgerForStream(ledger:SubscriberLedger|undefined,streamId:string,now=Date.now()):SubscriberLedger|undefined{
+ if(!ledger)return undefined;
+ if(ledger.streamId===streamId)return ledger;
+ return {ownerId:ledger.ownerId,streamId,baselineAt:now,known:{},pending:{},scanJobs:[]};
+}
 export const subscriberBonus=50;
 export const subscriberAlertDurationMs=3000; // 0.5s enter + 2s hold + 0.5s exit.
 function open(state:ArenaState,now:number){return state.match?.phase!=='results'&&(!state.match?.endsAt||now<state.match.endsAt);}

@@ -8,7 +8,7 @@ import {homedir} from 'node:os';
 import {KeyPool} from './key-pool.ts';
 import {createSubscriberOAuth} from './subscriber-oauth.ts';
 import {scanSubscribers,subscriberRequest} from './subscriber-reader.ts';
-import {ingestSubscribers,applyPendingSubscribers,type SubscriberLedger} from '../lib/subscribers.ts';
+import {ingestSubscribers,applyPendingSubscribers,subscriberLedgerForStream,type SubscriberLedger} from '../lib/subscribers.ts';
 import {defaultAudio,type AudioSettings} from '../lib/audio-events.ts';
 import {createServer,type ServerResponse} from 'node:http';
 import {mkdirSync,existsSync,statSync,createReadStream} from 'node:fs';
@@ -44,6 +44,7 @@ if(saved){
  if(savedLedger?.ownerId&&Number.isFinite(savedLedger.baselineAt)&&savedLedger.known&&savedLedger.pending)ledger=savedLedger;
  savedVideoOwner=saved.videoOwner||'';demo=migrateScores(saved.demo);live=migrateScores(saved.live);savedVideo=saved.video||'';savedMode=saved.activeMode==='live'?'live':'demo';resume=saved.resume;
 }
+ledger=subscriberLedgerForStream(ledger,savedVideo);
 // Only retained legacy votes can be imported; earlier history is not invented.
 if(savedVideo&&!database.sql('SELECT 1 FROM streams WHERE id=?').get(savedVideo))database.transaction(()=>{
  analytics.stream(savedVideo,savedVideo,resume?.since??Date.now(),true);
@@ -97,11 +98,11 @@ async function pollSubscribers(){
  if(Date.now()<subscriberNextRetry||subscriberBusy||!subscriberEnabled||!oauth.status().connected||!ledger)return;
  if(state.mode!=='live'||!state.connected){subscriberStatus='Waiting for live chat to connect.';return;}
  if(savedVideoOwner!==ledger.ownerId){subscriberStatus='Sign in to the channel that owns this livestream, then reconnect live chat.';return;}
- subscriberBusy=true;const expectedOwner=ledger.ownerId,expectedVideo=savedVideo;
+ subscriberBusy=true;const expectedOwner=ledger.ownerId,expectedVideo=savedVideo,expectedGeneration=generation;
  try{
   const token=await oauth.access();subscriberRecords=0;
   await scanSubscribers(token,()=>budget.reserve('lookup'),()=>ledger!, (page,jobs,baseline)=>{
-   if(!subscriberEnabled||ledger?.ownerId!==expectedOwner||savedVideo!==expectedVideo||state.mode!=='live'||!state.connected)return false;
+   if(generation!==expectedGeneration||!subscriberEnabled||ledger?.ownerId!==expectedOwner||savedVideo!==expectedVideo||state.mode!=='live'||!state.connected)return false;
    finalizeMatch();const previous={state,ledger,live,demo};
    try{database.transaction(()=>{
     if(baseline)ledger={...ledger!,initialized:true,baselineAt:Date.now(),scanJobs:jobs,known:{...ledger!.known,...Object.fromEntries(page.records.map(record=>[record.id,Date.now()]))}};
@@ -111,11 +112,11 @@ async function pollSubscribers(){
    if(state!==previous.state&&!broadcastTimer)broadcastTimer=setTimeout(broadcast,100);
    subscriberRecords+=page.records.length;subscriberLastCheck=new Date().toISOString();return true;
   });
-  if(!subscriberEnabled||ledger?.ownerId!==expectedOwner||savedVideo!==expectedVideo||state.mode!=='live')return;
+  if(generation!==expectedGeneration||!subscriberEnabled||ledger?.ownerId!==expectedOwner||savedVideo!==expectedVideo||state.mode!=='live')return;
   subscriberFailures=0;subscriberNextRetry=0;
   subscriberStatus=ledger?.scanJobs?.length?'Tracking active · catching up on older entries.':'Tracking active · checking new public subscribers every 15 seconds.';
  }catch(error){
-  if(!subscriberEnabled||ledger?.ownerId!==expectedOwner||savedVideo!==expectedVideo||state.mode!=='live')return;
+  if(generation!==expectedGeneration||!subscriberEnabled||ledger?.ownerId!==expectedOwner||savedVideo!==expectedVideo||state.mode!=='live')return;
   if((error as {retryable?:boolean}).retryable){
    subscriberFailures++;const delay=Math.min(120000,15000*2**Math.min(subscriberFailures-1,3));
    subscriberNextRetry=Date.now()+delay;subscriberStatus=`Temporary subscriber connection problem. Retrying in ${delay/1000} seconds.`;
@@ -137,7 +138,7 @@ createServer(async(req,res)=>{
   if(req.method==='GET'&&url.pathname==='/api/events'){res.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive','X-Accel-Buffering':'no'});res.write(`data: ${JSON.stringify(displayState())}\n\n`);clients.add(res);const heartbeat=setInterval(()=>res.write(': keepalive\n\n'),15000);req.on('close',()=>{clearInterval(heartbeat);clients.delete(res);});return;}
   if(req.method==='GET'&&url.pathname==='/api/state'){json(res,200,{...state,audio,audioTest});return;}
   if(req.method==='GET'&&url.pathname==='/api/config'){json(res,200,{keyCount:envKeys.length,subscribers:{...oauth.status(),enabled:subscriberEnabled,status:subscriberStatus,lastCheck:subscriberLastCheck,ownerId:ledger?.ownerId,recordsLastCheck:subscriberRecords,pendingBonuses:Object.keys(ledger?.pending||{}).length,nextRetryAt:subscriberNextRetry?new Date(subscriberNextRetry).toISOString():null}});return;}
-  if(req.method==='GET'&&url.pathname==='/api/subscribers/callback'){await oauth.callback(url.searchParams.get('code')||'',url.searchParams.get('state')||'');const token=await oauth.access();const owner=await subscriberRequest('channels',{part:'id',mine:'true'},token,()=>budget.reserve('lookup'));const ownerId=owner.items?.[0]?.id;if(!ownerId)throw new Error('No YouTube channel found for this sign-in.');if(ledger?.ownerId!==ownerId)ledger={ownerId,baselineAt:Date.now(),known:{},pending:{}};subscriberEnabled=true;subscriberStatus='Signed in. Waiting for the matching live channel.';persist();res.writeHead(303,{Location:'/','Cache-Control':'no-store','Referrer-Policy':'no-referrer'});res.end();void pollSubscribers();return;}
+  if(req.method==='GET'&&url.pathname==='/api/subscribers/callback'){await oauth.callback(url.searchParams.get('code')||'',url.searchParams.get('state')||'');const token=await oauth.access();const owner=await subscriberRequest('channels',{part:'id',mine:'true'},token,()=>budget.reserve('lookup'));const ownerId=owner.items?.[0]?.id;if(!ownerId)throw new Error('No YouTube channel found for this sign-in.');if(ledger?.ownerId!==ownerId)ledger={ownerId,streamId:savedVideo,baselineAt:Date.now(),known:{},pending:{}};subscriberEnabled=true;subscriberStatus='Signed in. Waiting for the matching live channel.';persist();res.writeHead(303,{Location:'/','Cache-Control':'no-store','Referrer-Policy':'no-referrer'});res.end();void pollSubscribers();return;}
   if(req.method==='GET'&&url.pathname==='/api/diagnostics'){json(res,200,{...diagnostics.read(),budget:budget.read(),resumeAvailable:!!resume?.page});return;}
   if(req.method==='POST'&&url.pathname.startsWith('/api/')){
    const origin=req.headers.origin;if(origin&&!['http://127.0.0.1:3000','http://localhost:3000',`http://127.0.0.1:${port}`,`http://localhost:${port}`].includes(origin)){json(res,403,{error:'This origin cannot control the arena.'});return;}
@@ -158,7 +159,7 @@ createServer(async(req,res)=>{
     if(connecting||session)throw new Error('A connection is already active or in progress.');
     if(typeof body.video!=='string'||(!envKeys.length&&(typeof body.credential!=='string'||!body.credential.trim())))throw new Error('Enter the stream URL and configure YOUTUBE_API_KEYS in .env.');
     const id=videoId(body.video.trim());connecting=true;const operation=++generation;
-    try{const pool=new KeyPool(envKeys.length?envKeys:[body.credential.trim()]);const info=await pool.lookup(async key=>{budget.reserve('lookup');diagnostics.record({event:'video_lookup'});return youtube('videos',{id,part:'liveStreamingDetails,snippet'},key).catch(error=>{diagnostics.record({event:'video_lookup_error'});throw error;});});const chat=info.items?.[0]?.liveStreamingDetails?.activeLiveChatId;if(!chat)throw new Error('No active live chat found. Start the livestream with live chat enabled, then reconnect.');if(generation!==operation)throw new Error('Connection cancelled.');const restored=database.loadLive(id);state={...(restored??initialState()),mode:'live'};resume=database.get<{resume?:typeof resume}>('checkpoint:'+id)?.resume;savedVideo=id;savedVideoOwner=info.items?.[0]?.snippet?.channelId||'';analytics.stream(id,info.items?.[0]?.snippet?.title||id);beginStreaming(pool,chat);json(res,200,{ok:true});}finally{connecting=false;}return;
+    try{const pool=new KeyPool(envKeys.length?envKeys:[body.credential.trim()]);const info=await pool.lookup(async key=>{budget.reserve('lookup');diagnostics.record({event:'video_lookup'});return youtube('videos',{id,part:'liveStreamingDetails,snippet'},key).catch(error=>{diagnostics.record({event:'video_lookup_error'});throw error;});});const chat=info.items?.[0]?.liveStreamingDetails?.activeLiveChatId;if(!chat)throw new Error('No active live chat found. Start the livestream with live chat enabled, then reconnect.');if(generation!==operation)throw new Error('Connection cancelled.');const restored=database.loadLive(id);state={...(restored??initialState()),mode:'live'};resume=database.get<{resume?:typeof resume}>('checkpoint:'+id)?.resume;const nextLedger=subscriberLedgerForStream(ledger,id);if(nextLedger!==ledger){ledger=nextLedger;subscriberRecords=0;subscriberLastCheck=undefined;subscriberNextRetry=0;subscriberFailures=0;subscriberEnabled=oauth.status().connected;subscriberStatus='New livestream · preparing subscriber tracking.';state={...state,subscriberAlerts:[]};}savedVideo=id;savedVideoOwner=info.items?.[0]?.snippet?.channelId||'';analytics.stream(id,info.items?.[0]?.snippet?.title||id);beginStreaming(pool,chat);json(res,200,{ok:true});}finally{connecting=false;}return;
    }
    json(res,404,{error:'Unknown action.'});return;
   }
