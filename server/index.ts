@@ -7,7 +7,7 @@ import {processEvents} from './process-events.ts';
 import {homedir} from 'node:os';
 import {KeyPool} from './key-pool.ts';
 import {createSubscriberOAuth} from './subscriber-oauth.ts';
-import {readSubscribers,subscriberRequest} from './subscriber-reader.ts';
+import {scanSubscribers,subscriberRequest} from './subscriber-reader.ts';
 import {ingestSubscribers,applyPendingSubscribers,type SubscriberLedger} from '../lib/subscribers.ts';
 import {defaultAudio,type AudioSettings} from '../lib/audio-events.ts';
 import {createServer,type ServerResponse} from 'node:http';
@@ -99,12 +99,23 @@ async function pollSubscribers(){
  if(savedVideoOwner!==ledger.ownerId){subscriberStatus='Sign in to the channel that owns this livestream, then reconnect live chat.';return;}
  subscriberBusy=true;const expectedOwner=ledger.ownerId,expectedVideo=savedVideo;
  try{
-  const token=await oauth.access(),records=await readSubscribers(token,()=>budget.reserve('lookup'),ledger);
+  const token=await oauth.access();subscriberRecords=0;
+  await scanSubscribers(token,()=>budget.reserve('lookup'),()=>ledger!, (page,jobs,baseline)=>{
+   if(!subscriberEnabled||ledger?.ownerId!==expectedOwner||savedVideo!==expectedVideo||state.mode!=='live'||!state.connected)return false;
+   finalizeMatch();const previous={state,ledger,live,demo};
+   try{database.transaction(()=>{
+    if(baseline)ledger={...ledger!,initialized:true,baselineAt:Date.now(),scanJobs:jobs,known:{...ledger!.known,...Object.fromEntries(page.records.map(record=>[record.id,Date.now()]))}};
+    else{const update=ingestSubscribers(state,ledger!,page.records);state=update.state;ledger={...update.ledger,scanJobs:jobs};}
+    live=state;persist();
+   });}catch(error){({state,ledger,live,demo}=previous);database.invalidate();throw error;}
+   if(state!==previous.state&&!broadcastTimer)broadcastTimer=setTimeout(broadcast,100);
+   subscriberRecords+=page.records.length;subscriberLastCheck=new Date().toISOString();return true;
+  });
   if(!subscriberEnabled||ledger?.ownerId!==expectedOwner||savedVideo!==expectedVideo||state.mode!=='live')return;
-  subscriberFailures=0;subscriberNextRetry=0;subscriberRecords=records.length;
-  finalizeMatch();if(!ledger.initialized){ledger={...ledger,initialized:true,baselineAt:Date.now(),known:{...ledger.known,...Object.fromEntries(records.map(record=>[record.id,Date.now()]))}};persist();subscriberLastCheck=new Date().toISOString();subscriberStatus='Baseline saved. New public subscribers will be checked every 15 seconds.';return;}const update=ingestSubscribers(state,ledger,records);const changed=state!==update.state||Object.keys(ledger.known).length!==Object.keys(update.ledger.known).length;state=update.state;ledger=update.ledger;if(changed)publish();
-  subscriberLastCheck=new Date().toISOString();subscriberStatus='Checking public subscribers every 15 seconds.';
+  subscriberFailures=0;subscriberNextRetry=0;
+  subscriberStatus=ledger?.scanJobs?.length?'Tracking active · catching up on older entries.':'Tracking active · checking new public subscribers every 15 seconds.';
  }catch(error){
+  if(!subscriberEnabled||ledger?.ownerId!==expectedOwner||savedVideo!==expectedVideo||state.mode!=='live')return;
   if((error as {retryable?:boolean}).retryable){
    subscriberFailures++;const delay=Math.min(120000,15000*2**Math.min(subscriberFailures-1,3));
    subscriberNextRetry=Date.now()+delay;subscriberStatus=`Temporary subscriber connection problem. Retrying in ${delay/1000} seconds.`;

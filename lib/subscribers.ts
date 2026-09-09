@@ -1,7 +1,7 @@
 import type {ArenaState} from './arena';
 export type Subscriber={id:string;name:string;publishedAt:number};
 export type SubscriberAlert={id:string;viewer:string;code?:string;points:number;startsAt:number};
-export type SubscriberLedger={ownerId:string;baselineAt:number;initialized?:boolean;known:Record<string,number>;pending:Record<string,{name:string;round:number}>};
+export type SubscriberLedger={scanJobs?:{page:string;full?:boolean}[];ownerId:string;baselineAt:number;initialized?:boolean;known:Record<string,number>;pending:Record<string,{name:string;round:number}>};
 export const subscriberBonus=50;
 export const subscriberAlertDurationMs=3000; // 0.5s enter + 2s hold + 0.5s exit.
 function open(state:ArenaState,now:number){return state.match?.phase!=='results'&&(!state.match?.endsAt||now<state.match.endsAt);}
@@ -23,11 +23,11 @@ export function ingestSubscribers(state:ArenaState,ledger:SubscriberLedger,recor
   if(subscriber.publishedAt<ledger.baselineAt||!Number.isFinite(subscriber.publishedAt))continue;
   const round=state.match?.openedAt??0;
   const code=latestCountry(state,subscriber.id,round);
-  if(open(state,now)&&code){
+  if(open(state,now)&&subscriber.publishedAt>=round&&code){
    state={...state,scores:{...state.scores,[code]:(state.scores[code]||0)+subscriberBonus}};
    state=alert(state,`${subscriber.id}:${now}`,subscriber.name,code,subscriberBonus,now);
   }else{
-   if(open(state,now))ledger.pending[subscriber.id]={name:subscriber.name,round};
+   if(open(state,now)&&subscriber.publishedAt>=round)ledger.pending[subscriber.id]={name:subscriber.name,round};
    state=alert(state,`${subscriber.id}:${now}`,subscriber.name,undefined,0,now);
   }
  }
