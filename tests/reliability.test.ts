@@ -27,6 +27,16 @@ test('voter bursts display oldest then newest without overlap on the same flag',
 test('diagnostics persist durations and vote totals without credentials or cursor',()=>{
  const directory=mkdtempSync(join(tmpdir(),'arena-diag-'));const diagnostics=createDiagnostics(directory);
  diagnostics.record({event:'stream_end',durationMs:10000});diagnostics.record({event:'votes',accepted:2,ignored:3});
+ diagnostics.flush();
  const data=createDiagnostics(directory).read();assert.equal(data.acceptedVotes,2);assert.equal(data.ignoredMessages,3);assert.equal(data.lastConnectionDurationMs,10000);
  assert.doesNotMatch(JSON.stringify(data),/pageToken|credential/);
+});
+
+test('advisory accounting survives restart and permits requests above its estimate',()=>{
+ const directory=mkdtempSync(join(tmpdir(),'arena-advisory-'));
+ const budget=createRequestBudget(directory,()=>100000000,5,false);
+ budget.reserve('stream');budget.reserve('lookup');
+ const restored=createRequestBudget(directory,()=>100000000,5,false);
+ assert.equal(restored.read().estimatedUnits,6);assert.equal(restored.read().warning,true);assert.equal(restored.read().blocked,false);
+ restored.reserve('stream');assert.equal(restored.read().estimatedUnits,11);
 });

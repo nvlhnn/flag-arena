@@ -3,7 +3,7 @@ import {join} from 'node:path';
 
 // Conservative LOCAL estimate, not Google's authoritative project quota.
 // A rolling 24-hour window also avoids spending twice across a day boundary.
-export function createRequestBudget(directory:string,now=Date.now,limit=9000){
+export function createRequestBudget(directory:string,now=Date.now,limit=9000,enforce=true){
  const path=join(directory,'request-budget.json');
  let entries:{time:number;units:number}[]=[],blocked=false;
  try{if(existsSync(path)){
@@ -13,10 +13,10 @@ export function createRequestBudget(directory:string,now=Date.now,limit=9000){
  }}catch{blocked=true;}
  function prune(){entries=entries.filter(e=>e.time>now()-86400000);}
  return {
-  read(){prune();return {estimatedUnits:entries.reduce((n,e)=>n+e.units,0),limit,window:'rolling 24 hours',blocked,requestsLastHour:entries.filter(e=>e.time>now()-3600000).length,estimateOnly:true,nextReleaseAt:entries[0]?new Date(entries[0].time+86400000).toISOString():null};},
+  read(){prune();return {estimatedUnits:entries.reduce((n,e)=>n+e.units,0),limit,window:'rolling 24 hours',enforced:enforce,warning:entries.reduce((n,e)=>n+e.units,0)>=limit,blocked:blocked||(enforce&&entries.reduce((n,e)=>n+e.units,0)>=limit),requestsLastHour:entries.filter(e=>e.time>now()-3600000).length,estimateOnly:true,nextReleaseAt:entries[0]?new Date(entries[0].time+86400000).toISOString():null};},
   reserve(kind:'stream'|'lookup'){
    prune();const units=kind==='stream'?5:1;
-   if(blocked||entries.reduce((n,e)=>n+e.units,0)+units>limit)throw new Error('Local request budget unavailable or exhausted. See diagnostics.');
+   if(blocked||(enforce&&entries.reduce((n,e)=>n+e.units,0)+units>limit))throw new Error('Local request budget unavailable or exhausted. See diagnostics.');
    const next=[...entries,{time:now(),units}];
    // Reserve on disk BEFORE making an external request. Disk failure fails closed.
    writeFileSync(path+'.tmp',JSON.stringify(next),{flush:true});renameSync(path+'.tmp',path);entries=next;

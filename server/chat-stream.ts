@@ -17,10 +17,11 @@ export function createChatSource(key:string,chat:string){
   try{for await(const batch of call)yield batch;}finally{signal.removeEventListener('abort',cancel);call.cancel();}
  }};
 }
-export function applyChatBatch(state:ArenaState,batch:ChatBatch,since:number){
+export function applyChatBatch(state:ArenaState,batch:ChatBatch,since:number,onAccepted?:(count:number)=>void){
+ const seen=new Set(state.seen);let accepted=0;
  for(const item of batch.items||[]){const snippet=item.snippet,time=Date.parse(snippet?.publishedAt||'');if(snippet?.type!==1||!item.id||!item.authorDetails?.channelId||!Number.isFinite(time)||time<since)continue;
-  const result=acceptVote(state,{id:item.id,viewerId:item.authorDetails.channelId,viewer:item.authorDetails.displayName||'Viewer',text:snippet.textMessageDetails?.messageText||'',time});if(result.accepted)state=result.state;
- }return state;
+  const result=acceptVote(state,{id:item.id,viewerId:item.authorDetails.channelId,viewer:item.authorDetails.displayName||'Viewer',text:snippet.textMessageDetails?.messageText||'',time},Date.now(),seen);if(result.accepted){if(state.seen.length>=10000)seen.delete(state.seen[0]);seen.add(item.id);accepted++;state=result.state;}
+ }onAccepted?.(accepted);return state;
 }
 export function streamError(code:number){
  const messages:Record<number,string>={3:'YouTube rejected the chat request or resume token. Disconnect and reconnect.',5:'YouTube live chat was not found.',7:'YouTube denied access. Check the API key restrictions and stream visibility.',8:'YouTube quota or rate limit reached. Wait before reconnecting.',9:'YouTube chat has ended or is disabled.',16:'YouTube authentication failed. Check your API key.'};

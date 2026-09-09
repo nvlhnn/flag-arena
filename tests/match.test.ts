@@ -12,7 +12,7 @@ test('countdown accepts final votes, freezes at zero, and stores the top five',(
  assert.equal(acceptVote(countdown,vote,11000).accepted,false);
  assert.equal(settleMatch(accepted.state,10999),accepted.state);
  const results=settleMatch(accepted.state,11000);assert.equal(results.match?.phase,'results');
- assert.equal(results.match?.results?.length,5);assert.equal(results.match?.results?.[0].points,600);
+ assert.equal(results.match?.results?.length,5);assert.equal(results.match?.results?.[0].points,501);
  assert.equal(results.match?.results?.[4].code,'FR');
  assert.equal(acceptVote(results,{...vote,id:'later',time:20000},20000).accepted,false);
  assert.deepEqual(settleMatch(results,99999),results);

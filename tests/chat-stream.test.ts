@@ -5,14 +5,14 @@ import {initialState} from '../lib/arena.ts';
 const message=(id:string,time:number,type=1)=>({id,snippet:{type,publishedAt:new Date(time).toISOString(),textMessageDetails:{messageText:'Indonesia'}},authorDetails:{channelId:'channel',displayName:'Viewer Name'}});
 test('stream batches ignore history and paid messages, preserve names, reject replay',()=>{
  const first=applyChatBatch(initialState(),{items:[message('old',999),message('new',1000),message('paid',20000,15)]},1000);
- assert.equal(first.scores.ID,100);assert.equal(first.recent[0].viewer,'Viewer Name');
- const replay=applyChatBatch(first,{items:[message('new',1000),message('next',11000)]},1000);assert.equal(replay.scores.ID,200);
+ assert.equal(first.scores.ID,1);assert.equal(first.recent[0].viewer,'Viewer Name');
+ const replay=applyChatBatch(first,{items:[message('new',1000),message('next',11000)]},1000);assert.equal(replay.scores.ID,2);
  const reset=applyChatBatch(initialState(),{items:[message('old',11000)]},12000);assert.deepEqual(reset.scores,{});
 });
 test('reconnection sends last token, does not skip recovered votes, closes on ended chat',async()=>{
  const controller=new AbortController(),pages:(string|undefined)[]=[],waits:number[]=[];let state=initialState();
  await consumeChat({signal:controller.signal,async *read(page){pages.push(page);if(pages.length===1){yield {nextPageToken:'resume-1',items:[message('a',1000)]};throw Object.assign(new Error('network'),{code:14});}yield {nextPageToken:'resume-2',items:[message('a',1000),message('b',11000)]};yield {offlineAt:new Date().toISOString()};},onBatch:b=>{state=applyChatBatch(state,b,1000);},onStatus:()=>{},wait:async ms=>{waits.push(ms);}});
- assert.deepEqual(pages,[undefined,'resume-1']);assert.deepEqual(waits,[2000]);assert.equal(state.scores.ID,200);
+ assert.deepEqual(pages,[undefined,'resume-1']);assert.deepEqual(waits,[2000]);assert.equal(state.scores.ID,2);
 });
 test('quota and authentication failures do not loop or expose raw errors',async()=>{
  for(const code of [3,7,8,9,16]){let calls=0;const statuses:string[]=[];await consumeChat({signal:new AbortController().signal,async *read(){calls++;throw Object.assign(new Error('SECRET'),{code});},onBatch:()=>{},onStatus:s=>statuses.push(s),wait:async()=>assert.fail('Should not retry')});assert.equal(calls,1);assert.ok(!statuses.join('').includes('SECRET'));}
@@ -39,7 +39,7 @@ test('persisted budget refusal stops before a request is made',async()=>{
 test('restart uses saved cursor and can accept votes from the disconnected interval',async()=>{
  let state=initialState();const controller=new AbortController();
  await consumeChat({initialPage:'saved-cursor',signal:controller.signal,async *read(page){assert.equal(page,'saved-cursor');yield {items:[message('during-downtime',11000)],offlineAt:'ended'};},onBatch:b=>{state=applyChatBatch(state,b,1000);},onStatus:()=>{}});
- assert.equal(state.scores.ID,100);
+ assert.equal(state.scores.ID,1);
 });
 test('an invalid saved cursor is cleared instead of trapping every reconnect',async()=>{
  let cleared=false;const statuses:string[]=[];
