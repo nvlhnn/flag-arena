@@ -11,6 +11,22 @@ before(async()=>{child=spawn(process.execPath,['--import','tsx','server/index.ts
 after(()=>child?.kill());
 const readSaved=()=>{const db=openDatabase(directory);try{return db.load()!;}finally{db.close();}};
 const post=(name:string,body:unknown,origin=base)=>fetch(`${base}/api/${name}`,{method:'POST',headers:{'Content-Type':'application/json',Origin:origin},body:JSON.stringify(body)});
+void test('storage endpoints list sessions and reject unreviewed or foreign cleanup',async()=>{
+ const storage=await(await fetch(`${base}/api/storage`)).json();assert.deepEqual(storage.sessions,[]);assert.ok(storage.databaseBytes>0);
+ assert.equal((await post('cleanup/preview',{sessions:[]})).status,400);
+ assert.equal((await post('cleanup',{sessions:['missing'],confirmed:true})).status,400);
+ assert.equal((await post('cleanup',{sessions:['missing'],confirmed:true},'https://example.com')).status,403);
+});
+test('catch-up toggle validates and persists across modes and score reset',async()=>{
+ assert.equal((await post('catch-up',{enabled:'false'})).status,400);
+ assert.equal((await post('catch-up',{enabled:false})).status,200);
+ assert.equal((await(await fetch(`${base}/api/state`)).json()).catchUpEnabled,false);
+ assert.equal(readSaved().demo.catchUpEnabled,false);
+ assert.equal(readSaved().live.catchUpEnabled,false);
+ await post('reset',{});
+ assert.equal((await(await fetch(`${base}/api/state`)).json()).catchUpEnabled,false);
+ assert.equal((await post('catch-up',{enabled:true})).status,200);
+});
 test('local service shares votes with overlays and saves them',async()=>{const controller=new AbortController();const stream=await fetch(`${base}/api/events`,{signal:controller.signal});const reader=stream.body!.getReader();assert.match(new TextDecoder().decode((await reader.read()).value),/data:/);const accepted=await(await post('vote',{viewer:'Integration viewer',text:'Indonesia'})).json();assert.equal(accepted.accepted,true);const event=new TextDecoder().decode((await reader.read()).value);assert.match(event,/"ID":1[,}]/);controller.abort();const repeat=await(await post('vote',{viewer:'Integration viewer',text:'Brazil'})).json();assert.equal(repeat.accepted,true);const saved=readSaved();assert.equal(saved.demo.scores.ID,1);assert.equal(saved.live.scores.ID,undefined);});
 test('foreign origins and invalid links cannot control the scoreboard',async()=>{assert.equal((await post('reset',{},'https://example.com')).status,403);assert.equal((await post('connect',{video:'https://example.com',credential:'fake-test-value'})).status,400);assert.equal((await fetch(`${base}/api/state`)).status,200);});
 test('audio controls persist, validate input and deliver overlay test events',async()=>{

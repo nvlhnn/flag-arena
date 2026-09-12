@@ -1,3 +1,6 @@
+import {prepareConnection} from './session.ts';
+import {createCleanup} from './cleanup.ts';
+import {topCountryVoters} from '../lib/top-voters.ts';
 import {liveUpdate} from '../lib/live-updates.ts';
 import {configuredKeys} from './env.ts';
 import {openDatabase} from './database.ts';
@@ -53,8 +56,9 @@ if(savedVideo&&!database.sql('SELECT 1 FROM streams WHERE id=?').get(savedVideo)
 let state=savedMode==='live'?{...live,connected:false,status:'Disconnected — scores saved.'}:demo,session:{since:number;controller:AbortController;close:()=>void}|undefined,generation=0,connecting=false;
 const clients=new Set<ServerResponse>();
 function persist(){database.save({demo,live,video:savedVideo,resume,activeMode:state.mode,audio,subscriberLedger:ledger,videoOwner:savedVideoOwner});}
+const cleanup=createCleanup(database,()=>savedVideo);
 persist();
-function displayState(){return {...state,audio,audioTest,seen:[],cooldowns:{},viewers:undefined};}
+function displayState(){return {...state,topVoters:topCountryVoters(state),audio,audioTest,seen:[],cooldowns:{},viewers:undefined};}
 let broadcastTimer:ReturnType<typeof setTimeout>|undefined;
 let lastBroadcastState:ArenaState|undefined,lastBroadcastVideo='';
 function broadcast(){broadcastTimer=undefined;if(!clients.size)return;const current=displayState();const payload=JSON.stringify(liveUpdate(current,lastBroadcastState,lastBroadcastVideo!==savedVideo));lastBroadcastState=current;lastBroadcastVideo=savedVideo;for(const client of clients){if(client.writableLength>1024*1024){client.destroy();clients.delete(client);}else client.write(`data: ${payload}\n\n`);}}
@@ -131,13 +135,14 @@ createServer(async(req,res)=>{
   const host=req.headers.host||'';if(!/^(127\.0\.0\.1|localhost):\d+$/.test(host)){json(res,403,{error:'Local access only.'});return;}
   const url=new URL(req.url||'/',`http://${host}`);finalizeMatch();
   if(req.method==='GET'&&url.pathname==='/api/analytics/streams'){json(res,200,analytics.streams());return;}
+  if(req.method==='GET'&&url.pathname==='/api/storage'){json(res,200,cleanup.list());return;}
   if(req.method==='GET'&&url.pathname==='/api/analytics'){
    const page=(name:string)=>{const value=Number(url.searchParams.get(name)||0);if(!Number.isSafeInteger(value)||value<0||value>100000)throw new Error('Invalid page');return value;};
    json(res,200,analytics.summary(url.searchParams.get('stream')||savedVideo,page('donorPage'),page('donationPage')));return;
   }
   if(req.method==='GET'&&url.pathname==='/api/events'){res.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive','X-Accel-Buffering':'no'});res.write(`data: ${JSON.stringify(displayState())}\n\n`);clients.add(res);const heartbeat=setInterval(()=>res.write(': keepalive\n\n'),15000);req.on('close',()=>{clearInterval(heartbeat);clients.delete(res);});return;}
   if(req.method==='GET'&&url.pathname==='/api/state'){json(res,200,{...state,audio,audioTest});return;}
-  if(req.method==='GET'&&url.pathname==='/api/config'){json(res,200,{keyCount:envKeys.length,subscribers:{...oauth.status(),enabled:subscriberEnabled,status:subscriberStatus,lastCheck:subscriberLastCheck,ownerId:ledger?.ownerId,recordsLastCheck:subscriberRecords,pendingBonuses:Object.keys(ledger?.pending||{}).length,nextRetryAt:subscriberNextRetry?new Date(subscriberNextRetry).toISOString():null}});return;}
+  if(req.method==='GET'&&url.pathname==='/api/config'){json(res,200,{keyCount:envKeys.length,previousVideo:savedVideo,subscribers:{...oauth.status(),enabled:subscriberEnabled,status:subscriberStatus,lastCheck:subscriberLastCheck,ownerId:ledger?.ownerId,recordsLastCheck:subscriberRecords,pendingBonuses:Object.keys(ledger?.pending||{}).length,nextRetryAt:subscriberNextRetry?new Date(subscriberNextRetry).toISOString():null}});return;}
   if(req.method==='GET'&&url.pathname==='/api/subscribers/callback'){await oauth.callback(url.searchParams.get('code')||'',url.searchParams.get('state')||'');const token=await oauth.access();const owner=await subscriberRequest('channels',{part:'id',mine:'true'},token,()=>budget.reserve('lookup'));const ownerId=owner.items?.[0]?.id;if(!ownerId)throw new Error('No YouTube channel found for this sign-in.');if(ledger?.ownerId!==ownerId)ledger={ownerId,streamId:savedVideo,baselineAt:Date.now(),known:{},pending:{}};subscriberEnabled=true;subscriberStatus='Signed in. Waiting for the matching live channel.';persist();res.writeHead(303,{Location:'/','Cache-Control':'no-store','Referrer-Policy':'no-referrer'});res.end();void pollSubscribers();return;}
   if(req.method==='GET'&&url.pathname==='/api/diagnostics'){json(res,200,{...diagnostics.read(),budget:budget.read(),resumeAvailable:!!resume?.page});return;}
   if(req.method==='POST'&&url.pathname.startsWith('/api/')){
@@ -145,21 +150,37 @@ createServer(async(req,res)=>{
    if(!req.headers['content-type']?.startsWith('application/json')){json(res,415,{error:'JSON required.'});return;}
    let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>8192){json(res,413,{error:'Request too large.'});return;}}const body=JSON.parse(raw||'{}');
    if(url.pathname==='/api/subscribers/connect'){json(res,200,{url:oauth.start()});return;}
+   if(url.pathname==='/api/cleanup/preview'){if(connecting)throw new Error('Wait for the stream connection to finish.');json(res,200,cleanup.preview(body.sessions));return;}
+   if(url.pathname==='/api/cleanup'){if(connecting)throw new Error('Wait for the stream connection to finish.');json(res,200,cleanup.remove(body.sessions,body.token,body.confirmed));return;}
    if(url.pathname==='/api/subscribers/resume'){subscriberEnabled=true;subscriberNextRetry=0;void pollSubscribers();json(res,200,{ok:true});return;}
    if(url.pathname==='/api/subscribers/disconnect'){subscriberEnabled=false;await oauth.disconnect();ledger=undefined;state={...state,subscriberAlerts:[]};subscriberStatus='Subscriber tracking disconnected.';publish();json(res,200,{ok:true});return;}
    if(url.pathname==='/api/subscribers/test'){if(state.mode!=='demo')throw new Error('Subscriber test is available in demo mode only.');const demoLedger:SubscriberLedger={ownerId:'demo',baselineAt:0,known:{},pending:{}};const viewer='Demo subscriber',now=Date.now();const testState:ArenaState={...state,recent:[{id:crypto.randomUUID(),viewerId:viewer,viewer,text:'Indonesia',code:'ID',time:now},...state.recent].slice(0,500)};const simulated=ingestSubscribers(testState,demoLedger,[{id:viewer,name:viewer,publishedAt:now}],now).state;state={...simulated,recent:state.recent};publish();json(res,200,{ok:true});return;}
+   if(url.pathname==='/api/catch-up'){if(typeof body.enabled!=='boolean')throw new Error('Choose on or off.');demo={...demo,catchUpEnabled:body.enabled};live={...live,catchUpEnabled:body.enabled};state={...state,catchUpEnabled:body.enabled};publish();json(res,200,{ok:true});return;}
    if(url.pathname==='/api/audio'){if(typeof body.muted!=='boolean'||typeof body.voice!=='boolean'||typeof body.volume!=='number'||!Number.isFinite(body.volume)||body.volume<0||body.volume>1)throw new Error('Invalid audio settings.');if(body.overtakeStyle!==undefined&&!['grouped','all'].includes(String(body.overtakeStyle)))throw new Error('Invalid announcement style.');audio={overtakeStyle:body.overtakeStyle as 'grouped'|'all'|undefined,muted:body.muted,voice:body.voice,volume:body.volume};publish();json(res,200,{ok:true});return;}
    if(url.pathname==='/api/audio/test'){audioTest={id:crypto.randomUUID(),at:Date.now()};publish();json(res,200,{ok:true});return;}
    if(url.pathname==='/api/match/finish'){state=finishMatch(state);publish();json(res,200,{ok:true});return;}
    if(url.pathname==='/api/match/next'){if(typeof body.reset!=='boolean')throw new Error('Choose reset or keep scores.');state=nextMatch(state,body.reset);if(ledger)ledger={...ledger,pending:{}};if(state.mode==='live'&&resume){resume={...resume,since:state.match!.openedAt!};if(session)session.since=resume.since;}publish();json(res,200,{ok:true});return;}
    if(url.pathname==='/api/vote'){if(state.mode==='live')throw new Error('Test votes are disabled while live scores are displayed. Disconnect first.');if(typeof body.viewer!=='string'||!body.viewer.trim()||body.viewer.length>60||typeof body.text!=='string'||body.text.length>200)throw new Error('Enter a viewer name and a country vote.');const result=acceptVote(state,{id:crypto.randomUUID(),viewerId:body.viewer.trim(),viewer:body.viewer.trim(),text:body.text,time:Date.now()});if(result.accepted){state=result.state;publish();}json(res,200,{accepted:result.accepted,reason:result.reason});return;}
-   if(url.pathname==='/api/reset'){if(state.match&&state.match.phase!=='open')throw new Error('Use the next-match buttons after results.');if(ledger)ledger={...ledger,pending:{}};state={...initialState(),mode:state.mode,connected:state.connected,status:state.status,seen:state.seen,cooldowns:state.cooldowns};if(state.mode==='live'&&resume){resume={...resume,since:Date.now()};if(session)session.since=resume.since;}publish();json(res,200,{ok:true});return;}
+   if(url.pathname==='/api/reset'){if(state.match&&state.match.phase!=='open')throw new Error('Use the next-match buttons after results.');if(ledger)ledger={...ledger,pending:{}};state={...initialState(),catchUpEnabled:state.catchUpEnabled,mode:state.mode,connected:state.connected,status:state.status,seen:state.seen,cooldowns:state.cooldowns};if(state.mode==='live'&&resume){resume={...resume,since:Date.now()};if(session)session.since=resume.since;}publish();json(res,200,{ok:true});return;}
    if(url.pathname==='/api/disconnect'){stop();state=demo;publish();json(res,200,{ok:true});return;}
    if(url.pathname==='/api/connect'){
-    if(connecting||session)throw new Error('A connection is already active or in progress.');
+    if(connecting)throw new Error('A connection is already in progress.');
+    if(body.sessionChoice!==undefined&&!['continue','fresh'].includes(body.sessionChoice))throw new Error('Invalid session choice.');
+    if(body.previousVideo!==undefined&&body.previousVideo!==savedVideo)throw new Error('The previous stream changed. Refresh and choose the session again.');
     if(typeof body.video!=='string'||(!envKeys.length&&(typeof body.credential!=='string'||!body.credential.trim())))throw new Error('Enter the stream URL and configure YOUTUBE_API_KEYS in .env.');
     const id=videoId(body.video.trim());connecting=true;const operation=++generation;
-    try{const pool=new KeyPool(envKeys.length?envKeys:[body.credential.trim()]);const info=await pool.lookup(async key=>{budget.reserve('lookup');diagnostics.record({event:'video_lookup'});return youtube('videos',{id,part:'liveStreamingDetails,snippet'},key).catch(error=>{diagnostics.record({event:'video_lookup_error'});throw error;});});const chat=info.items?.[0]?.liveStreamingDetails?.activeLiveChatId;if(!chat)throw new Error('No active live chat found. Start the livestream with live chat enabled, then reconnect.');if(generation!==operation)throw new Error('Connection cancelled.');const restored=database.loadLive(id);state={...(restored??initialState()),mode:'live'};resume=database.get<{resume?:typeof resume}>('checkpoint:'+id)?.resume;const nextLedger=subscriberLedgerForStream(ledger,id);if(nextLedger!==ledger){ledger=nextLedger;subscriberRecords=0;subscriberLastCheck=undefined;subscriberNextRetry=0;subscriberFailures=0;subscriberEnabled=oauth.status().connected;subscriberStatus='New livestream · preparing subscriber tracking.';state={...state,subscriberAlerts:[]};}savedVideo=id;savedVideoOwner=info.items?.[0]?.snippet?.channelId||'';analytics.stream(id,info.items?.[0]?.snippet?.title||id);beginStreaming(pool,chat);json(res,200,{ok:true});}finally{connecting=false;}return;
+    try{const pool=new KeyPool(envKeys.length?envKeys:[body.credential.trim()]);const info=await pool.lookup(async key=>{budget.reserve('lookup');diagnostics.record({event:'video_lookup'});return youtube('videos',{id,part:'liveStreamingDetails,snippet'},key).catch(error=>{diagnostics.record({event:'video_lookup_error'});throw error;});});const chat=info.items?.[0]?.liveStreamingDetails?.activeLiveChatId;if(!chat)throw new Error('No active live chat found. Start the livestream with live chat enabled, then reconnect.');if(generation!==operation)throw new Error('Connection cancelled.');const owner=info.items?.[0]?.snippet?.channelId||'';
+    const prepared=prepareConnection(database,{video:id,previousVideo:savedVideo,owner,previousOwner:savedVideoOwner,choice:body.sessionChoice,live,ledger});
+    const previous={state,live,ledger,resume,savedVideo,savedVideoOwner};
+    stop();
+    try{database.transaction(()=>{
+     if(prepared.continuing)database.linkSession(id,savedVideo);
+     state={...prepared.state,catchUpEnabled:state.catchUpEnabled!==false};live=state;ledger=prepared.ledger;resume=prepared.resume;
+     savedVideo=id;savedVideoOwner=owner;
+     analytics.stream(id,info.items?.[0]?.snippet?.title||id);persist();
+    });}catch(error){({state,live,ledger,resume,savedVideo,savedVideoOwner}=previous);database.invalidate();state={...state,connected:false,status:'Connection switch failed. Reconnect to resume.'};throw error;}
+    subscriberRecords=0;subscriberLastCheck=undefined;subscriberNextRetry=0;subscriberFailures=0;subscriberEnabled=oauth.status().connected;subscriberStatus='Preparing subscriber tracking.';
+    beginStreaming(pool,chat);json(res,200,{ok:true});}finally{connecting=false;}return;
    }
    json(res,404,{error:'Unknown action.'});return;
   }

@@ -71,12 +71,14 @@ export function openDatabase(directory: string) {
       'INSERT INTO settings VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE value<>excluded.value',
     ).run(key, JSON.stringify(value));
   }
+  // Legacy video IDs are session IDs until a replacement broadcast is linked.
+  const sessionFor = (video: string) => get<string>('session:' + video) ?? video;
   // Viewer progress is normalized: growing viewer maps are not serialized on every save.
   function save(saved: SavedArena) {
     transaction(() => {
       const { demo: _demo, live: _live, ...metadata } = saved;
       for (const mode of ['demo', 'live'] as const) {
-        const key = mode === 'live' ? 'live:' + saved.video : 'demo';
+        const key = mode === 'live' ? 'live:' + sessionFor(saved.video) : 'demo';
         const state = saved[mode],
           old =
             mode === 'live' && previous?.video !== saved.video
@@ -105,6 +107,8 @@ export function openDatabase(directory: string) {
         });
       if (subscriberLedger !== previous?.subscriberLedger)
         set('subscriberLedger', subscriberLedger ?? null);
+      if (saved.video && (subscriberLedger !== previous?.subscriberLedger || saved.video !== previous?.video))
+        set('ledger:' + sessionFor(saved.video), subscriberLedger ?? null);
     });
     // An enclosing transaction restores this cache on rollback.
     previous = saved;
@@ -128,7 +132,7 @@ export function openDatabase(directory: string) {
     } as SavedArena;
     for (const mode of ['demo', 'live'] as const) {
       const state = loadState(
-        mode === 'live' ? 'live:' + result.video : 'demo',
+        mode === 'live' ? 'live:' + sessionFor(result.video) : 'demo',
       );
       if (!state) throw new Error('Incomplete database state');
       result[mode] = state;
@@ -177,7 +181,12 @@ export function openDatabase(directory: string) {
     set,
     save,
     load,
-    loadLive: (id: string) => loadState('live:' + id),
+    sessionFor,
+    linkSession: (video: string, previousVideo: string) => {
+      set('session:' + video, sessionFor(previousVideo));
+      previous = undefined;
+    },
+    loadLive: (id: string) => loadState('live:' + sessionFor(id)),
     importLegacy,
     invalidate: () => {
       previous = undefined;
