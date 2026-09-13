@@ -1,3 +1,6 @@
+import {defaultDonationEffects,validDonationEffects,queueDonation,type DonationEffects} from '../lib/donation-effects.ts';
+import {createDonationVoice} from './donation-voice.ts';
+import {createSuperChats} from './superchat.ts';
 import {prepareConnection} from './session.ts';
 import {createCleanup} from './cleanup.ts';
 import {topCountryVoters} from '../lib/top-voters.ts';
@@ -16,7 +19,7 @@ import {defaultAudio,type AudioSettings} from '../lib/audio-events.ts';
 import {createServer,type ServerResponse} from 'node:http';
 import {mkdirSync,existsSync,statSync,createReadStream} from 'node:fs';
 import {resolve,extname,sep} from 'node:path';
-import {initialState,acceptVote,migrateScores,type ArenaState} from '../lib/arena.ts';
+import {countries,initialState,acceptVote,migrateScores,type ArenaState} from '../lib/arena.ts';
 import {videoId,youtube} from './youtube.ts';
 import {createChatSource,consumeChat} from './chat-stream.ts';
 import {createDiagnostics} from './diagnostics.ts';
@@ -26,7 +29,9 @@ const port=Number(process.env.ARENA_PORT||4318),root=resolve('dist'),dataDir=res
 mkdirSync(dataDir,{recursive:true});const file=resolve(dataDir,'state.json');
 const databaseDir=resolve(process.env.ARENA_DATA_DIR||resolve(process.env.LOCALAPPDATA||homedir(),'FlagArena'));
 const database=openDatabase(databaseDir);database.importLegacy(file);
-const analytics=createAnalytics(database),exchangeRates=createExchangeRates(database);
+let donationEffects:DonationEffects={...defaultDonationEffects};
+const donationVoice=createDonationVoice(dataDir);
+const analytics=createAnalytics(database),exchangeRates=createExchangeRates(database),superChats=createSuperChats(database,()=>donationEffects);
 setInterval(()=>void exchangeRates.refresh(),60000).unref();
 const envKeys=configuredKeys();
 const oauth=createSubscriberOAuth(dataDir,port);
@@ -36,11 +41,14 @@ const diagnostics=createDiagnostics(dataDir);
 // Track it for visibility; only Google's actual quota responses stop API use.
 const budget=createRequestBudget(dataDir,Date.now,9000,false);
 let audio:AudioSettings={...defaultAudio},audioTest:{id:string;at:number}|undefined;
+let overlayLayout:'current'|'superchat'='current';
 let savedMode:'demo'|'live'='demo';
 let resume:{chat:string;page?:string;since:number}|undefined;
 let demo=initialState(),live: ArenaState={...initialState(),mode:'live',status:'Disconnected — scores saved.'},savedVideo='';
 const saved=database.load();
 if(saved){
+ if(validDonationEffects(saved.donationEffects))donationEffects=saved.donationEffects;
+ overlayLayout=saved.overlayLayout==='superchat'?'superchat':'current';
  const savedAudio=saved.audio as AudioSettings|undefined;
  if(savedAudio&&typeof savedAudio.muted==='boolean'&&typeof savedAudio.voice==='boolean'&&typeof savedAudio.volume==='number'&&savedAudio.volume>=0&&savedAudio.volume<=1)audio=savedAudio;
  const savedLedger=saved.subscriberLedger as SubscriberLedger|undefined;
@@ -55,15 +63,22 @@ if(savedVideo&&!database.sql('SELECT 1 FROM streams WHERE id=?').get(savedVideo)
 });
 let state=savedMode==='live'?{...live,connected:false,status:'Disconnected — scores saved.'}:demo,session:{since:number;controller:AbortController;close:()=>void}|undefined,generation=0,connecting=false;
 const clients=new Set<ServerResponse>();
-function persist(){database.save({demo,live,video:savedVideo,resume,activeMode:state.mode,audio,subscriberLedger:ledger,videoOwner:savedVideoOwner});}
+function persist(){database.save({demo,live,video:savedVideo,resume,activeMode:state.mode,audio,subscriberLedger:ledger,videoOwner:savedVideoOwner,overlayLayout,donationEffects});}
 const cleanup=createCleanup(database,()=>savedVideo);
 persist();
-function displayState(){return {...state,topVoters:topCountryVoters(state),audio,audioTest,seen:[],cooldowns:{},viewers:undefined};}
+function displayState(){return {...state,donationEffects,overlayLayout,superchatSession:state.mode==='live'?database.sessionFor(savedVideo):'',topVoters:topCountryVoters(state),audio,audioTest,seen:[],cooldowns:{},viewers:undefined};}
 let broadcastTimer:ReturnType<typeof setTimeout>|undefined;
 let lastBroadcastState:ArenaState|undefined,lastBroadcastVideo='';
 function broadcast(){broadcastTimer=undefined;if(!clients.size)return;const current=displayState();const payload=JSON.stringify(liveUpdate(current,lastBroadcastState,lastBroadcastVideo!==savedVideo));lastBroadcastState=current;lastBroadcastVideo=savedVideo;for(const client of clients){if(client.writableLength>1024*1024){client.destroy();clients.delete(client);}else client.write(`data: ${payload}\n\n`);}}
 function publish(){if(state.mode==='demo')demo=state;else live=state;persist();if(!broadcastTimer)broadcastTimer=setTimeout(broadcast,100);}
 function finalizeMatch(){const next=settleMatch(state);if(next!==state){state=next;publish();}}
+function applySuperChatAwards(){
+ if(state.mode!=='live')return;
+ const previous={state,live};
+ try{database.transaction(()=>{state=superChats.apply(state,savedVideo);if(state!==previous.state){live=state;persist();}});}catch(error){({state,live}=previous);database.invalidate();throw error;}
+ if(state!==previous.state&&!broadcastTimer)broadcastTimer=setTimeout(broadcast,100);
+}
+setInterval(()=>{try{applySuperChatAwards();}catch{console.error('Unable to save Super Chat awards.');}},1000).unref();
 setInterval(()=>{try{finalizeMatch();}catch{console.error('Unable to save match results.');}},100).unref();
 function stop(){generation++;const current=session;session=undefined;current?.controller.abort();current?.close();}
 function beginStreaming(pool:KeyPool,chat:string){
@@ -85,8 +100,8 @@ function beginStreaming(pool:KeyPool,chat:string){
    const previous={state,live,demo,ledger,resume};let accepted=0;
    try{database.transaction(()=>{
     const tracked=database.sql('SELECT tracked_from FROM streams WHERE id=?').get(savedVideo);
-    const processed=processEvents(analytics,savedVideo,state,batch,current.since,Number(tracked?.tracked_from??current.since));
-    state=processed.state;accepted=processed.accepted;
+    const processed=processEvents(analytics,savedVideo,state,batch,current.since,Number(tracked?.tracked_from??current.since),Date.now(),(id,currentState,avatar)=>{superChats.capture(savedVideo,id,currentState,avatar,current.since,Date.now());return superChats.apply(currentState,savedVideo);});
+    state=superChats.apply(processed.state,savedVideo);accepted=processed.accepted;
     if(ledger&&ledger.ownerId===savedVideoOwner){const applied=applyPendingSubscribers(state,ledger);state=applied.state;ledger=applied.ledger;}
     if(batch.nextPageToken)resume={chat,since:current.since,page:batch.nextPageToken};
     live=state;persist();
@@ -135,13 +150,25 @@ createServer(async(req,res)=>{
   const host=req.headers.host||'';if(!/^(127\.0\.0\.1|localhost):\d+$/.test(host)){json(res,403,{error:'Local access only.'});return;}
   const url=new URL(req.url||'/',`http://${host}`);finalizeMatch();
   if(req.method==='GET'&&url.pathname==='/api/analytics/streams'){json(res,200,analytics.streams());return;}
+  if(req.method==='GET'&&url.pathname==='/api/supporters'){json(res,200,superChats.supporters(state.mode==='live'?savedVideo:'',Number(url.searchParams.get('offset')||0),Number(url.searchParams.get('size')||12)));return;}
+  if(req.method==='GET'&&url.pathname==='/api/superchats'){json(res,200,superChats.page(state.mode==='live'?savedVideo:'',Number(url.searchParams.get('offset')||0),Number(url.searchParams.get('size')||4)));return;}
   if(req.method==='GET'&&url.pathname==='/api/storage'){json(res,200,cleanup.list());return;}
   if(req.method==='GET'&&url.pathname==='/api/analytics'){
    const page=(name:string)=>{const value=Number(url.searchParams.get(name)||0);if(!Number.isSafeInteger(value)||value<0||value>100000)throw new Error('Invalid page');return value;};
    json(res,200,analytics.summary(url.searchParams.get('stream')||savedVideo,page('donorPage'),page('donationPage')));return;
   }
   if(req.method==='GET'&&url.pathname==='/api/events'){res.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive','X-Accel-Buffering':'no'});res.write(`data: ${JSON.stringify(displayState())}\n\n`);clients.add(res);const heartbeat=setInterval(()=>res.write(': keepalive\n\n'),15000);req.on('close',()=>{clearInterval(heartbeat);clients.delete(res);});return;}
-  if(req.method==='GET'&&url.pathname==='/api/state'){json(res,200,{...state,audio,audioTest});return;}
+  if(req.method==='GET'&&url.pathname==='/api/donation-voice'){
+   const event=state.donationEvents?.find(item=>item.id===url.searchParams.get('event')&&item.endsAt>Date.now());
+   if(!event){json(res,404,{error:'Celebration expired.'});return;}
+   json(res,200,donationEffects.voice?await donationVoice.playlist(event,{...donationEffects}):{clips:[]});return;
+  }
+  if(req.method==='GET'&&url.pathname.startsWith('/api/donation-voice/')){
+   const key=/^\/api\/donation-voice\/([a-f0-9]{64})\.wav$/.exec(url.pathname)?.[1],path=key?donationVoice.file(key):undefined;
+   if(!path||!existsSync(path)){json(res,404,{error:'Voice clip unavailable.'});return;}
+   res.writeHead(200,{'Content-Type':'audio/wav','Cache-Control':'private, max-age=86400'});createReadStream(path).on('error',()=>res.destroy()).pipe(res);return;
+  }
+  if(req.method==='GET'&&url.pathname==='/api/state'){json(res,200,{...state,audio,audioTest,overlayLayout,donationEffects});return;}
   if(req.method==='GET'&&url.pathname==='/api/config'){json(res,200,{keyCount:envKeys.length,previousVideo:savedVideo,subscribers:{...oauth.status(),enabled:subscriberEnabled,status:subscriberStatus,lastCheck:subscriberLastCheck,ownerId:ledger?.ownerId,recordsLastCheck:subscriberRecords,pendingBonuses:Object.keys(ledger?.pending||{}).length,nextRetryAt:subscriberNextRetry?new Date(subscriberNextRetry).toISOString():null}});return;}
   if(req.method==='GET'&&url.pathname==='/api/subscribers/callback'){await oauth.callback(url.searchParams.get('code')||'',url.searchParams.get('state')||'');const token=await oauth.access();const owner=await subscriberRequest('channels',{part:'id',mine:'true'},token,()=>budget.reserve('lookup'));const ownerId=owner.items?.[0]?.id;if(!ownerId)throw new Error('No YouTube channel found for this sign-in.');if(ledger?.ownerId!==ownerId)ledger={ownerId,streamId:savedVideo,baselineAt:Date.now(),known:{},pending:{}};subscriberEnabled=true;subscriberStatus='Signed in. Waiting for the matching live channel.';persist();res.writeHead(303,{Location:'/','Cache-Control':'no-store','Referrer-Policy':'no-referrer'});res.end();void pollSubscribers();return;}
   if(req.method==='GET'&&url.pathname==='/api/diagnostics'){json(res,200,{...diagnostics.read(),budget:budget.read(),resumeAvailable:!!resume?.page});return;}
@@ -156,12 +183,20 @@ createServer(async(req,res)=>{
    if(url.pathname==='/api/subscribers/disconnect'){subscriberEnabled=false;await oauth.disconnect();ledger=undefined;state={...state,subscriberAlerts:[]};subscriberStatus='Subscriber tracking disconnected.';publish();json(res,200,{ok:true});return;}
    if(url.pathname==='/api/subscribers/test'){if(state.mode!=='demo')throw new Error('Subscriber test is available in demo mode only.');const demoLedger:SubscriberLedger={ownerId:'demo',baselineAt:0,known:{},pending:{}};const viewer='Demo subscriber',now=Date.now();const testState:ArenaState={...state,recent:[{id:crypto.randomUUID(),viewerId:viewer,viewer,text:'Indonesia',code:'ID',time:now},...state.recent].slice(0,500)};const simulated=ingestSubscribers(testState,demoLedger,[{id:viewer,name:viewer,publishedAt:now}],now).state;state={...simulated,recent:state.recent};publish();json(res,200,{ok:true});return;}
    if(url.pathname==='/api/catch-up'){if(typeof body.enabled!=='boolean')throw new Error('Choose on or off.');demo={...demo,catchUpEnabled:body.enabled};live={...live,catchUpEnabled:body.enabled};state={...state,catchUpEnabled:body.enabled};publish();json(res,200,{ok:true});return;}
+   if(url.pathname==='/api/donation-effects'){if(!validDonationEffects(body))throw new Error('Invalid donation settings.');donationEffects=body;publish();json(res,200,{ok:true});return;}
+   if(url.pathname==='/api/donation-effects/test'){
+    if(state.mode!=='demo')throw new Error('Switch to demo mode to preview a donation.');
+    if(state.match?.phase==='countdown'||state.match?.phase==='results')throw new Error('Start an open demo round first.');
+    if(!countries.some(country=>country.code===body.country))throw new Error('Choose a valid country.');
+    state={...state,donationEvents:queueDonation(state.donationEvents??[],{id:'preview:'+Date.now(),name:'Alex',country:body.country,points:5000,amountMicros:'5000000',currency:'USD',preview:true},donationEffects.duration,Date.now())};publish();json(res,200,{ok:true});return;
+   }
+   if(url.pathname==='/api/layout'){if(!['current','superchat'].includes(body.layout))throw new Error('Choose Current or Super Chat layout.');overlayLayout=body.layout;publish();json(res,200,{ok:true});return;}
    if(url.pathname==='/api/audio'){if(typeof body.muted!=='boolean'||typeof body.voice!=='boolean'||typeof body.volume!=='number'||!Number.isFinite(body.volume)||body.volume<0||body.volume>1)throw new Error('Invalid audio settings.');if(body.overtakeStyle!==undefined&&!['grouped','all'].includes(String(body.overtakeStyle)))throw new Error('Invalid announcement style.');audio={overtakeStyle:body.overtakeStyle as 'grouped'|'all'|undefined,muted:body.muted,voice:body.voice,volume:body.volume};publish();json(res,200,{ok:true});return;}
    if(url.pathname==='/api/audio/test'){audioTest={id:crypto.randomUUID(),at:Date.now()};publish();json(res,200,{ok:true});return;}
    if(url.pathname==='/api/match/finish'){state=finishMatch(state);publish();json(res,200,{ok:true});return;}
    if(url.pathname==='/api/match/next'){if(typeof body.reset!=='boolean')throw new Error('Choose reset or keep scores.');state=nextMatch(state,body.reset);if(ledger)ledger={...ledger,pending:{}};if(state.mode==='live'&&resume){resume={...resume,since:state.match!.openedAt!};if(session)session.since=resume.since;}publish();json(res,200,{ok:true});return;}
    if(url.pathname==='/api/vote'){if(state.mode==='live')throw new Error('Test votes are disabled while live scores are displayed. Disconnect first.');if(typeof body.viewer!=='string'||!body.viewer.trim()||body.viewer.length>60||typeof body.text!=='string'||body.text.length>200)throw new Error('Enter a viewer name and a country vote.');const result=acceptVote(state,{id:crypto.randomUUID(),viewerId:body.viewer.trim(),viewer:body.viewer.trim(),text:body.text,time:Date.now()});if(result.accepted){state=result.state;publish();}json(res,200,{accepted:result.accepted,reason:result.reason});return;}
-   if(url.pathname==='/api/reset'){if(state.match&&state.match.phase!=='open')throw new Error('Use the next-match buttons after results.');if(ledger)ledger={...ledger,pending:{}};state={...initialState(),catchUpEnabled:state.catchUpEnabled,mode:state.mode,connected:state.connected,status:state.status,seen:state.seen,cooldowns:state.cooldowns};if(state.mode==='live'&&resume){resume={...resume,since:Date.now()};if(session)session.since=resume.since;}publish();json(res,200,{ok:true});return;}
+   if(url.pathname==='/api/reset'){if(state.match&&state.match.phase!=='open')throw new Error('Use the next-match buttons after results.');if(ledger)ledger={...ledger,pending:{}};state={...initialState(),match:{phase:'open',openedAt:Date.now()},catchUpEnabled:state.catchUpEnabled,mode:state.mode,connected:state.connected,status:state.status,seen:state.seen,cooldowns:state.cooldowns};if(state.mode==='live'&&resume){resume={...resume,since:Date.now()};if(session)session.since=resume.since;}publish();json(res,200,{ok:true});return;}
    if(url.pathname==='/api/disconnect'){stop();state=demo;publish();json(res,200,{ok:true});return;}
    if(url.pathname==='/api/connect'){
     if(connecting)throw new Error('A connection is already in progress.');

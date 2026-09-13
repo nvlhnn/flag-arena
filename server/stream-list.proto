@@ -24,6 +24,7 @@ message LiveChatMessage {
 message LiveChatMessageAuthorDetails {
   optional string channel_id = 10101;
   optional string display_name = 103;
+  optional string profile_image_url = 104;
 }
 message LiveChatMessageSnippet {
   optional int32 type = 1;

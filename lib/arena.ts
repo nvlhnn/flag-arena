@@ -1,3 +1,4 @@
+import type {DonationEffects,DonationCelebration} from './donation-effects';
 import type {SubscriberAlert} from './subscribers';
 import type {AudioSettings} from './audio-events';
 import iso from 'i18n-iso-countries';
@@ -10,7 +11,7 @@ export type ViewerProgress={name?:string;countryPoints?:Record<string,number>;xp
 export type Vote={basePoints?:number;multiplier?:number;level?:number;points?:number;levelUp?:boolean;id:string;viewerId:string;viewer:string;text:string;time:number};
 export const POINTS_PER_VOTE=1;
 export type Match={phase:'open'|'countdown'|'results';openedAt?:number;endsAt?:number;results?:{code:string;name:string;points:number}[]};
-export type ArenaState={topVoters?:Record<string,{name:string;points:number}>;catchUpEnabled?:boolean;viewers?:Record<string,ViewerProgress>;subscriberAlerts?:SubscriberAlert[];audio?:AudioSettings;audioTest?:{id:string;at:number};match?:Match;scoreVersion?:2;mode:'demo'|'live';connected?:boolean;status:string;scores:Record<string,number>;recent:(Vote&{code:string})[];cooldowns:Record<string,number>;seen:string[]};
+export type ArenaState={donationEffects?:DonationEffects;donationEvents?:DonationCelebration[];overlayLayout?:'current'|'superchat';superchatSession?:string;topVoters?:Record<string,{name:string;points:number}>;catchUpEnabled?:boolean;viewers?:Record<string,ViewerProgress>;subscriberAlerts?:SubscriberAlert[];audio?:AudioSettings;audioTest?:{id:string;at:number};match?:Match;scoreVersion?:2;mode:'demo'|'live';connected?:boolean;status:string;scores:Record<string,number>;recent:(Vote&{code:string})[];cooldowns:Record<string,number>;seen:string[]};
 export const initialState=():ArenaState=>({catchUpEnabled:true,scoreVersion:2,mode:'demo',status:'Ready for a demo. YouTube is not connected.',scores:{},viewers:{},recent:[],cooldowns:{},seen:[]});
 const normalize=(s:string)=>s.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
 const aliases=new Map<string,string>();

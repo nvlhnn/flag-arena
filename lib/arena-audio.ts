@@ -1,3 +1,4 @@
+import type {DonationCelebration,DonationEffects} from './donation-effects';
 import {announcementClips,defaultAudio,type Announcement,type AudioSettings} from './audio-events';
 
 /** Prerecorded speech goes through Web Audio, including the OBS browser mixer. */
@@ -7,6 +8,9 @@ export class ArenaAudio{
  private speech?:GainNode;
  private buffers=new Map<string,AudioBuffer>();
  private generation=0;
+ private donationUntil=0;
+ clearDonationCache(){this.playlists.clear();}
+ private playlists=new Map<string,Promise<string[]>>();
  private speakingUntil=0;
  private queue=Promise.resolve();
  private queued=0;
@@ -20,7 +24,7 @@ export class ArenaAudio{
  }
  async unlock(){try{await this.ready();if(this.context?.state==='suspended')await this.context.resume();const running=this.context?.state==='running';this.report(!running);return running;}catch{this.report(true);return false;}}
  configure(settings:AudioSettings){this.settings=settings;if(this.master&&this.context)this.master.gain.setValueAtTime(settings.muted?0:settings.volume,this.context.currentTime);if(settings.muted||!settings.voice)this.cancelSpeech();}
- cancelSpeech(){this.generation++;this.speakingUntil=0;if(this.speech&&this.context){this.speech.disconnect();this.speech=this.context.createGain();this.speech.connect(this.master!);}}
+ cancelSpeech(){this.donationUntil=0;this.generation++;this.speakingUntil=0;if(this.speech&&this.context){this.speech.disconnect();this.speech=this.context.createGain();this.speech.connect(this.master!);}}
  async effect(kind:'tick'|'urgent'|'end'|'rank'|'winner'){
   if(this.settings.muted)return;
   try{if(!await this.ready())return;this.configure(this.settings);const ctx=this.context!;
@@ -32,6 +36,7 @@ export class ArenaAudio{
   }catch{this.report(true);}
  }
  async announce(event:Announcement,priority=false){
+  if(Date.now()<this.donationUntil)return;
   if(priority)return this.speak(event,true);
   if(this.settings.muted||!this.settings.voice||this.queued>=(this.settings.overtakeStyle==='all'?100:6)||(this.settings.overtakeStyle!=='all'&&this.pendingCountries.has(event.country)))return;
   const generation=this.generation,enqueuedAt=Date.now();this.queued++;this.pendingCountries.add(event.country);
@@ -44,6 +49,7 @@ export class ArenaAudio{
   this.queue=task.catch(()=>{});return task;
  }
  private async speak(event:Announcement,priority=false){
+  if(Date.now()<this.donationUntil)return;
   if(this.settings.muted||!this.settings.voice)return;
   if(priority)this.cancelSpeech();
   const generation=this.generation;
@@ -65,10 +71,48 @@ export class ArenaAudio{
     this.buffers.set(clip,buffer);return buffer;
    }));
    if(generation!==this.generation||this.settings.muted||!this.settings.voice)return;
-   this.configure(this.settings);let start=ctx.currentTime+.15;
+   this.configure(this.settings);this.speech!.gain.value=1;let start=ctx.currentTime+.15;
    for(const buffer of buffers){const source=ctx.createBufferSource();source.buffer=buffer;source.connect(this.speech!);source.start(start);source.onended=()=>source.disconnect();start+=buffer.duration+.025;}
    this.speakingUntil=start;
   }catch{if(generation===this.generation){this.speakingUntil=0;this.report(true);}}
+ }
+ prepareDonation(event:DonationCelebration){
+  if(!this.playlists.has(event.id)){
+   const task=fetch('/api/donation-voice?event='+encodeURIComponent(event.id),{signal:AbortSignal.timeout(12000)}).then(async response=>{if(!response.ok)throw new Error('Voice unavailable');return (await response.json()).clips as string[];}).catch(()=>['/audio/en/donation-thank-you.wav','/audio/en/donation-super-chat.wav']);
+   this.playlists.set(event.id,task);if(this.playlists.size>30)this.playlists.delete(this.playlists.keys().next().value!);
+  }
+  return this.playlists.get(event.id)!;
+ }
+ async donation(event:DonationCelebration,settings:DonationEffects){
+  if(this.settings.muted||!this.settings.voice||!settings.voice||settings.volume===0)return;
+  this.cancelSpeech();this.donationUntil=event.endsAt;const generation=this.generation;
+  try{
+   if(!await this.ready()||generation!==this.generation)return;
+   const ctx=this.context!;
+   // A short loading deadline keeps the thanks audible even on a first-time name.
+   const fallback=['/audio/en/donation-thank-you.wav','/audio/en/donation-super-chat.wav'];
+   const urls=await Promise.race([this.prepareDonation(event),new Promise<string[]>(resolve=>setTimeout(()=>resolve(fallback),1800))]);
+   const buffers=await Promise.all(urls.map(async url=>{
+    if(this.buffers.has(url))return this.buffers.get(url)!;
+    const response=await fetch(url,{signal:AbortSignal.timeout(3000)});if(!response.ok)throw new Error('Voice clip unavailable');
+    const decoded=await ctx.decodeAudioData(await response.arrayBuffer());
+    const samples=decoded.getChannelData(0),margin=Math.floor(decoded.sampleRate*.025);let first=0,last=samples.length-1;
+    while(first<last&&Math.abs(samples[first])<.006)first++;
+    while(last>first&&Math.abs(samples[last])<.006)last--;
+    first=Math.max(0,first-margin);last=Math.min(samples.length-1,last+margin);
+    const buffer=ctx.createBuffer(decoded.numberOfChannels,last-first+1,decoded.sampleRate);
+    for(let channel=0;channel<decoded.numberOfChannels;channel++)buffer.copyToChannel(decoded.getChannelData(channel).subarray(first,last+1),channel);
+    this.buffers.set(url,buffer);
+    if(this.buffers.size>512)this.buffers.delete(this.buffers.keys().next().value!);return buffer;
+   }));
+   if(generation!==this.generation||Date.now()>=event.endsAt)return;
+   this.configure(this.settings);this.speech!.gain.value=settings.volume;
+   const remaining=(event.endsAt-Date.now())/1000-.15,total=buffers.reduce((sum,buffer)=>sum+buffer.duration+.025,0);
+   if(remaining<=0)return;
+   const rate=Math.max(1,Math.min(1.4,total/remaining));let start=ctx.currentTime+.05;const end=ctx.currentTime+remaining;
+   for(const buffer of buffers){if(start>=end)break;const source=ctx.createBufferSource();source.buffer=buffer;source.playbackRate.value=rate;source.connect(this.speech!);source.start(start);source.stop(end);source.onended=()=>source.disconnect();start+=buffer.duration/rate+.025;}
+   this.speakingUntil=end;
+  }catch{/* Donation audio failure never blocks the score or animation. */}
  }
  close(){this.generation++;void this.context?.close();}
 }

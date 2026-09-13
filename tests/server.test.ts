@@ -1,3 +1,4 @@
+import {defaultDonationEffects} from '../lib/donation-effects.ts';
 import {openDatabase} from '../server/database.ts';
 import test,{before,after} from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,6 +12,36 @@ before(async()=>{child=spawn(process.execPath,['--import','tsx','server/index.ts
 after(()=>child?.kill());
 const readSaved=()=>{const db=openDatabase(directory);try{return db.load()!;}finally{db.close();}};
 const post=(name:string,body:unknown,origin=base)=>fetch(`${base}/api/${name}`,{method:'POST',headers:{'Content-Type':'application/json',Origin:origin},body:JSON.stringify(body)});
+test('donation controls persist and previews never award points',async()=>{
+ const before=await(await fetch(`${base}/api/state`)).json();
+ const settings={...defaultDonationEffects,names:false,duration:6};
+ assert.equal((await post('donation-effects',{...settings,duration:99})).status,400);
+ assert.equal((await post('donation-effects',settings)).status,200);
+ assert.deepEqual(readSaved().donationEffects,settings);
+ assert.equal((await post('donation-effects/test',{country:'INVALID'})).status,400);
+ assert.equal((await post('donation-effects/test',{country:'JP'})).status,200);
+ const after=await(await fetch(`${base}/api/state`)).json();
+ assert.deepEqual(after.scores,before.scores);assert.equal(after.donationEvents[0].preview,true);
+ assert.equal(after.donationEvents[0].endsAt-after.donationEvents[0].startsAt,6000);
+ assert.equal((await(await fetch(`${base}/api/superchats`)).json()).total,0);
+ assert.equal((await fetch(`${base}/api/donation-voice?event=unknown`)).status,404);
+ assert.equal((await fetch(`${base}/api/donation-voice/not-a-hash.wav`)).status,404);
+ await post('donation-effects',defaultDonationEffects);
+});
+void test('overlay layout is persistent and validates input; demo never invents donations',async()=>{
+ assert.equal((await(await fetch(`${base}/api/state`)).json()).overlayLayout,'current');
+ assert.equal((await(await fetch(`${base}/api/supporters`)).json()).total,0);
+ assert.equal((await fetch(`${base}/api/supporters?offset=-1`)).status,400);
+ assert.equal((await fetch(`${base}/api/supporters?size=61`)).status,400);
+ assert.equal((await post('layout',{layout:'invalid'})).status,400);
+ assert.equal((await post('layout',{layout:'superchat'})).status,200);
+ assert.equal(readSaved().overlayLayout,'superchat');
+ assert.equal((await(await fetch(`${base}/api/state`)).json()).overlayLayout,'superchat');
+ assert.equal((await(await fetch(`${base}/api/superchats`)).json()).total,0);
+ assert.equal((await fetch(`${base}/api/superchats?offset=-1`)).status,400);
+ assert.equal((await fetch(`${base}/api/superchats?size=61`)).status,400);
+ await post('layout',{layout:'current'});
+});
 void test('storage endpoints list sessions and reject unreviewed or foreign cleanup',async()=>{
  const storage=await(await fetch(`${base}/api/storage`)).json();assert.deepEqual(storage.sessions,[]);assert.ok(storage.databaseBytes>0);
  assert.equal((await post('cleanup/preview',{sessions:[]})).status,400);

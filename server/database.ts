@@ -10,8 +10,10 @@ export type SavedArena = {
   resume?: { chat: string; page?: string; since: number };
   activeMode?: 'demo' | 'live';
   audio?: unknown;
+  donationEffects?: unknown;
   subscriberLedger?: unknown;
   videoOwner?: string;
+  overlayLayout?: 'current' | 'superchat';
 };
 
 export function openDatabase(directory: string) {
@@ -33,7 +35,9 @@ export function openDatabase(directory: string) {
  CREATE INDEX IF NOT EXISTS idx_donations_time ON donations(stream,time DESC,id);
  CREATE INDEX IF NOT EXISTS idx_donations_pending ON donations(currency,time) WHERE usd_micros IS NULL;
  CREATE TABLE IF NOT EXISTS exchange_rates(currency TEXT NOT NULL,requested_date TEXT NOT NULL,rate TEXT NOT NULL,rate_date TEXT NOT NULL,fetched_at INTEGER NOT NULL,PRIMARY KEY(currency,requested_date));
- PRAGMA user_version=1; PRAGMA optimize;`);
+ CREATE TABLE IF NOT EXISTS superchat_awards(stream TEXT NOT NULL,id TEXT NOT NULL,session TEXT NOT NULL,round INTEGER,avatar TEXT NOT NULL,country TEXT,status TEXT NOT NULL,points INTEGER NOT NULL,PRIMARY KEY(stream,id));
+ CREATE INDEX IF NOT EXISTS idx_superchat_session ON superchat_awards(session,status);
+ PRAGMA user_version=2; PRAGMA optimize;`);
   const statements = new Map<string, StatementSync>();
   const sql = (query: string) => {
     let statement = statements.get(query);

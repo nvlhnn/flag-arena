@@ -1,3 +1,4 @@
+import {activeDonation,defaultDonationEffects} from '../lib/donation-effects';
 import {useEffect,useRef,useState} from 'react';
 import type {ArenaState} from '../lib/arena';
 import {ArenaAudio} from '../lib/arena-audio';
@@ -6,12 +7,15 @@ import {defaultAudio,overtakeAnnouncements} from '../lib/audio-events';
 export function StreamAudio({state}:{state:ArenaState}){
  const [blocked,setBlocked]=useState(false);
  const engine=useRef<ArenaAudio|null>(null),latest=useRef(state),previous=useRef<ArenaState|null>(null);
- const lastRank=useRef(-Infinity),lastTick=useRef(''),closed=useRef(''),winner=useRef(''),lastSubscriber=useRef('');
- latest.current=state;
+ const lastRank=useRef(-Infinity),lastTick=useRef(''),closed=useRef(''),winner=useRef(''),lastSubscriber=useRef(''),lastDonation=useRef('');
+ useEffect(()=>{latest.current=state;},[state]);
  useEffect(()=>{const audio=new ArenaAudio(setBlocked);engine.current=audio;return()=>{audio.close();engine.current=null;};},[]);
  useEffect(()=>{
   const audio=engine.current;if(!audio)return;
   audio.configure(state.audio??defaultAudio);
+  if(previous.current?.donationEffects&&JSON.stringify(previous.current.donationEffects)!==JSON.stringify(state.donationEffects)){audio.cancelSpeech();audio.clearDonationCache();}
+  const donationSettings=state.donationEffects??defaultDonationEffects;
+  if(donationSettings.voice&&!audio.settings.muted&&audio.settings.voice)for(const event of state.donationEvents??[])if(event.endsAt>Date.now()&&event.startsAt<Date.now()+30000)void audio.prepareDonation(event);
   const before=previous.current;previous.current=state;
   if(!before){if(!audio.settings.muted)void audio.unlock();if(state.match?.phase==='results'){closed.current=String(state.match.endsAt);winner.current=String(state.match.endsAt);}return;}
   const changedRound=before.mode!==state.mode||before.match?.openedAt!==state.match?.openedAt;
@@ -26,8 +30,10 @@ export function StreamAudio({state}:{state:ArenaState}){
  useEffect(()=>{
   const tick=()=>{
    const current=latest.current,audio=engine.current,match=current.match;if(!audio)return;
+   const donation=activeDonation(current.donationEvents??[],match?.phase,Date.now());
+   if(donation&&lastDonation.current!==donation.id){lastDonation.current=donation.id;if(Date.now()-donation.startsAt<1500)void audio.donation(donation,current.donationEffects??defaultDonationEffects);}
    const subscriber=current.subscriberAlerts?.find(item=>Date.now()>=item.startsAt&&Date.now()<item.startsAt+1000);
-   if(subscriber&&lastSubscriber.current!==subscriber.id){lastSubscriber.current=subscriber.id;if(match?.phase!=='countdown'&&match?.phase!=='results'){audio.cancelSpeech();lastRank.current=Date.now();void audio.effect('winner');void audio.announce({kind:'subscriber',country:subscriber.points?subscriber.code||'':''},true);}}
+   if(!donation&&subscriber&&lastSubscriber.current!==subscriber.id){lastSubscriber.current=subscriber.id;if(match?.phase!=='countdown'&&match?.phase!=='results'){audio.cancelSpeech();lastRank.current=Date.now();void audio.effect('winner');void audio.announce({kind:'subscriber',country:subscriber.points?subscriber.code||'':''},true);}}
    if(!match?.endsAt)return;
    const key=String(match.endsAt),now=Date.now();
    if(match.phase==='countdown'){

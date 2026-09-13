@@ -48,7 +48,7 @@ export function createCleanup(database: ArenaDatabase, currentVideo: () => strin
       if (plan.token !== token) throw new Error('Selected session data changed. Review cleanup again.');
       for (const session of plan.sessions) {
         for (const broadcast of session.broadcasts) {
-          for (const table of ['votes', 'voter_totals', 'viewer_countries', 'donations', 'legacy_seen'])
+          for (const table of ['votes', 'voter_totals', 'viewer_countries', 'superchat_awards', 'donations', 'legacy_seen'])
             database.sql(`DELETE FROM ${table} WHERE stream=?`).run(broadcast.id);
           database.sql('DELETE FROM streams WHERE id=?').run(broadcast.id);
           for (const prefix of ['checkpoint:', 'session:'])

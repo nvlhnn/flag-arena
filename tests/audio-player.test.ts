@@ -1,6 +1,35 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {ArenaAudio} from '../lib/arena-audio.ts';
+import {defaultDonationEffects} from '../lib/donation-effects.ts';
+
+test('donation speech reserves its slot and finale cancellation discards pending audio',async()=>{
+ const originalContext=globalThis.AudioContext,originalFetch=globalThis.fetch;
+ let starts=0,release:()=>void=()=>{};
+ const barrier=new Promise<void>(resolve=>{release=resolve;});
+ const node=()=>({connect(){},disconnect(){},gain:{value:1,setValueAtTime(){}}});
+ const buffer=()=>({duration:.1,numberOfChannels:1,sampleRate:22050,getChannelData:()=>new Float32Array([.1,.2,.1]),copyToChannel(){}});
+ class Context{
+  state='running';currentTime=0;destination={};
+  createGain(){return node();}resume(){return Promise.resolve();}close(){return Promise.resolve();}
+  decodeAudioData(){return Promise.resolve(buffer());}createBuffer(){return buffer();}
+  createBufferSource(){return {...node(),buffer:null,playbackRate:{value:1},start(){starts++;},stop(){},onended:null};}
+ }
+ globalThis.AudioContext=Context as unknown as typeof AudioContext;
+ globalThis.fetch=(async(url)=>{if(String(url).includes('?event=')){await barrier;return Response.json({clips:['/audio/en/donation-thank-you.wav']});}return new Response(new ArrayBuffer(0));}) as typeof fetch;
+ const player=new ArenaAudio(()=>{}),now=Date.now();
+ const event={id:'one',name:'Alex',country:'ID',points:5000,amountMicros:'5000000',currency:'USD',startsAt:now,endsAt:now+10000};
+ try{
+  player.configure({muted:false,voice:true,volume:.5});
+  const pending=player.donation(event,defaultDonationEffects);
+  await new Promise(resolve=>setImmediate(resolve));
+  await player.announce({kind:'subscriber',country:'BR'},true);assert.equal(starts,0);
+  player.cancelSpeech();release();await pending;assert.equal(starts,0);
+  await player.donation(event,defaultDonationEffects);assert.equal(starts,1);
+  await player.announce({kind:'lead',country:'ID'},true);assert.equal(starts,1);
+  player.cancelSpeech();await player.announce({kind:'winner',country:'ID'},true);assert.equal(starts,3);
+ }finally{player.close();globalThis.AudioContext=originalContext;globalThis.fetch=originalFetch;}
+});
 
 test('speech respects mute, queues without overlap, and cancels clips still loading',async()=>{
  const originalContext=globalThis.AudioContext,originalFetch=globalThis.fetch;

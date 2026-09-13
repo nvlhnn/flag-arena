@@ -1,10 +1,15 @@
 'use client';
+import {DonationCelebrations} from '../components/donation-celebration';
+import {DonationEffectsControls} from '../components/donation-effects-controls';
+import {defaultDonationEffects,validDonationEffects,queueDonation} from '../lib/donation-effects';
 import {topCountryVoters} from '../lib/top-voters';
 
 import {mergeLiveUpdate} from '../lib/live-updates';
 
 import {StreamAnalytics} from '../components/stream-analytics';
 import {StorageControls} from '../components/storage-controls';
+import {SuperChatRail} from '../components/superchat-rail';
+import {HandCoins} from 'lucide-react';
 
 import {VoteEvent} from '../components/vote-event';
 
@@ -99,6 +104,9 @@ export default function Home(){
 
   if(local){const r=await fetch(`/api/${name}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const data=await r.json();if(!r.ok)throw new Error(data.error||'Action could not be completed.');return data;}
 
+  if(name==='donation-effects'&&validDonationEffects(body)){setState(current=>({...current,donationEffects:body}));return {};}
+  if(name==='donation-effects/test'){setState(current=>({...current,donationEvents:queueDonation(current.donationEvents??[],{id:crypto.randomUUID(),name:'Alex',country:String(body.country),amountMicros:'5000000',currency:'USD',points:5000,preview:true},(current.donationEffects??defaultDonationEffects).duration)}));return {};}
+  if(name==='layout'){setState(current=>({...current,overlayLayout:body.layout==='superchat'?'superchat':'current'}));return {};}
   if(name==='catch-up'){setState(current=>({...current,catchUpEnabled:body.enabled===true}));return {};}
 
   if(name==='audio'){setState({...state,audio:{overtakeStyle:body.overtakeStyle as 'grouped'|'all'|undefined,muted:body.muted===true,voice:body.voice===true,volume:Number(body.volume)}});return {};}
@@ -130,7 +138,8 @@ export default function Home(){
  const total=Object.values(state.scores).reduce((a,b)=>a+b,0),leader=total?ranked[0]:undefined,latest=state.recent[0],active=ranked.filter(c=>state.scores[c.code]);
 
  const topVoter=leader?(state.topVoters??topCountryVoters(state))[leader.code]:undefined;
- const grid=(total?ranked:countries).slice(0,117);
+ const superchatLayout=state.overlayLayout==='superchat';
+ const grid=(total?ranked:countries).slice(0,superchatLayout?99:117);
 
  async function vote(e:React.FormEvent){e.preventDefault();try{const r=await action('vote',{viewer,text:message});setNotice(r.accepted?'Vote counted!':r.reason);}catch(e){setNotice((e as Error).message);}}
 
@@ -138,13 +147,13 @@ export default function Home(){
 
  async function matchAction(name:string,reset?:boolean){setBusy(true);try{await action(name,reset===undefined?{}:{reset});setEffects([]);if(reset!==undefined)setRunning(false);setNotice('');}catch(error){setNotice((error as Error).message);}finally{setBusy(false);}}
 
- const board=<section className="arena" aria-label="Vertical stream scoreboard">
+ const board=<section className={`arena ${superchatLayout?'arena-superchat':''}`} aria-label="Vertical stream scoreboard">
 
-  <MatchOverlay match={state.match}/><SubscriberAlert alerts={state.subscriberAlerts}/>
+  <DonationCelebrations state={state}/><MatchOverlay match={state.match}/><SubscriberAlert alerts={state.subscriberAlerts}/>
 
-  <div className="reward-strip"><div><MessageCircle/><span>Chat vote<b>+1–5 points</b></span></div><div><Bell/><span>Subscribe<b>+50 points</b></span></div></div>
+  <div className="reward-strip">{superchatLayout?<div className="superchat-reward"><span className="superchat-reward-icon"><HandCoins/></span><span><small>SUPER CHAT BOOST</small><b>+1,000 <em>pts</em></b><i>for every $1 USD</i></span></div>:<div><MessageCircle/><span>Chat vote<b>+1–5 points</b></span></div>}{superchatLayout?<div className="superchat-subscribe"><span className="superchat-reward-icon"><Bell/></span><span><small>JOIN THE CROWD</small><b>+50 <em>pts</em></b><i>subscribe & pick a flag</i></span></div>:<div><Bell/><span>Subscribe<b>+50 points</b></span></div>}</div>
 
-  <div className="leader-card leader-showcase"><div className="leader-sparkles" aria-hidden="true"><i/><i/><i/></div><div className="leader-label"><Trophy/>{leader?'CURRENT LEADER':'THE TOP SPOT IS OPEN'}</div><div className="leader-main">{leader?flag(leader.code):<Flag/>}<div><h3>{leader?.name||'Who goes first?'}</h3><span className="leader-top-voter" title={topVoter?.name}><span className="top-voter-label">TOP VOTER</span><b>{topVoter?.name??(leader?'—':'Be the first')}</b></span></div><strong>{leader?formatPoints(state.scores[leader.code]):'—'}<small>POINTS</small></strong></div></div>
+  {superchatLayout?<SuperChatRail enabled={local&&state.mode==='live'} session={state.superchatSession??''}/>:<div className="leader-card leader-showcase"><div className="leader-sparkles" aria-hidden="true"><i/><i/><i/></div><div className="leader-label"><Trophy/>{leader?'CURRENT LEADER':'THE TOP SPOT IS OPEN'}</div><div className="leader-main">{leader?flag(leader.code):<Flag/>}<div><h3>{leader?.name||'Who goes first?'}</h3><span className="leader-top-voter" title={topVoter?.name}><span className="top-voter-label">TOP VOTER</span><b>{topVoter?.name??(leader?'—':'Be the first')}</b></span></div><strong>{leader?formatPoints(state.scores[leader.code]):'—'}<small>POINTS</small></strong></div></div>}
 
   <RankedGrid>{grid.map((c,i)=>{const effect=effects.find(v=>v.code===c.code&&v.starts<=Date.now()&&v.expires>Date.now());return <div key={c.code} data-country={c.code} className={`country-tile ${effect?'has-pop':''} ${leader?.code===c.code?'first':''} ${total>0&&i<3?`podium podium-${i+1}`:''}`} title={`${c.name}: ${state.scores[c.code]||0} points`}><div className="flag-frame"><small className={total>0&&i<3?'rank-medal':undefined}>{String(i+1)}</small>{total>0&&i===0&&<div className={`leader-crown crown-${i+1}`} aria-label={`Rank ${i+1}: ${['gold','silver','copper'][i]} crown`}><Crown/><i/><i/></div>}<AnimatedFlag voteId={effect?.id}>{flag(c.code)}</AnimatedFlag></div><strong>{formatPoints(state.scores[c.code]||0)}</strong>{effect&&<div key={effect.id} className={`voter-popup ${i%9<2?'popup-left':i%9>6?'popup-right':''}`}><b>{effect.viewer}</b><span>+{formatPoints(effect.points??1)}{(effect.multiplier??1)>1&&<em className="popup-multiplier"> · {effect.multiplier}×</em>}</span></div>}</div>;})}</RankedGrid>
 
@@ -166,7 +175,7 @@ export default function Home(){
 
  <div className="studio-panels">
 
-<section id="studio-live" hidden={studioTab!=="live"} aria-label="Live controls"><div className="control-card"><div className="card-title"><h2>Catch-up bonus</h2></div><p>Trailing countries earn up to 5× chat points once the leader reaches 1,000. Subscriber points stay the same.</p><button className="secondary" role="switch" aria-checked={state.catchUpEnabled!==false} disabled={!ready||busy} onClick={async()=>{setBusy(true);try{await action('catch-up',{enabled:state.catchUpEnabled===false});}catch(error){setNotice((error as Error).message);}finally{setBusy(false);}}}>Catch-up bonus: {state.catchUpEnabled!==false?'ON':'OFF'}</button><small>Below 25% of leader: 5× · below 50%: 4× · below 75%: 3× · below 90%: 2× · otherwise: 1×. Applies to new votes.</small></div> <div className="control-card match-controls"><div className="card-title"><Trophy size={19}/><h2>Match controls</h2></div>{state.match?.phase==='results'?<><p>Results are on screen. Choose how the next match starts.</p><button className="primary" disabled={busy} onClick={()=>void matchAction('match/next',true)}>New match — reset scores</button><button className="secondary" disabled={busy} onClick={()=>void matchAction('match/next',false)}>Continue — keep scores</button></>:state.match?.phase==='countdown'?<p role="status">Final 10 seconds! Voting stays open until zero.</p>:<><p>Give viewers 10 final seconds, then reveal the top five countries.</p><button className="primary" disabled={!ready||busy} onClick={()=>void matchAction('match/finish')}>Finish match · 10s countdown</button></>}</div>
+<section id="studio-live" hidden={studioTab!=="live"} aria-label="Live controls"><div className="control-card"><h2>Overlay version</h2><p>Choose the layout shown in your preview and OBS.</p><div className="layout-options"><button className="secondary" aria-pressed={state.overlayLayout!=='superchat'} disabled={busy} onClick={()=>void action('layout',{layout:'current'}).catch(e=>setNotice(e.message))}>Current</button><button className="secondary" aria-pressed={state.overlayLayout==='superchat'} disabled={busy} onClick={()=>void action('layout',{layout:'superchat'}).catch(e=>setNotice(e.message))}>Super Chat</button></div><small>Super Chat: 9 × 11 flags, donors ranked by session total, and a continuous supporter scroll. The layout switches immediately, even before your first donation. $1 USD = 1,000 points in either layout. Subscriber bonus stays +50.</small></div><div className="control-card"><div className="card-title"><h2>Catch-up bonus</h2></div><p>Trailing countries earn up to 5× chat points once the leader reaches 1,000. Subscriber points stay the same.</p><button className="secondary" role="switch" aria-checked={state.catchUpEnabled!==false} disabled={!ready||busy} onClick={async()=>{setBusy(true);try{await action('catch-up',{enabled:state.catchUpEnabled===false});}catch(error){setNotice((error as Error).message);}finally{setBusy(false);}}}>Catch-up bonus: {state.catchUpEnabled!==false?'ON':'OFF'}</button><small>Below 25% of leader: 5× · below 50%: 4× · below 75%: 3× · below 90%: 2× · otherwise: 1×. Applies to new votes.</small></div> <div className="control-card match-controls"><div className="card-title"><Trophy size={19}/><h2>Match controls</h2></div>{state.match?.phase==='results'?<><p>Results are on screen. Choose how the next match starts.</p><button className="primary" disabled={busy} onClick={()=>void matchAction('match/next',true)}>New match — reset scores</button><button className="secondary" disabled={busy} onClick={()=>void matchAction('match/next',false)}>Continue — keep scores</button></>:state.match?.phase==='countdown'?<p role="status">Final 10 seconds! Voting stays open until zero.</p>:<><p>Give viewers 10 final seconds, then reveal the top five countries.</p><button className="primary" disabled={!ready||busy} onClick={()=>void matchAction('match/finish')}>Finish match · 10s countdown</button></>}</div>
 
  <div className="control-card"><div className="card-title"><h2>Connect YouTube</h2></div>{local?<form onSubmit={connect}><p>When your stream is live, paste its link. Configured API keys are read from the local .env file and are never sent to the overlay.</p><label htmlFor="video">Livestream URL</label><input id="video" placeholder="https://youtube.com/watch?v=…" value={video} onChange={e=>setVideo(e.target.value)} required/>{keyCount?<small>{keyCount} API keys configured locally. Keys are tried in order on credential or quota errors; chat pauses when all keys fail.</small>:<><label htmlFor="credential">YouTube Data API key</label><input id="credential" type="password" autoComplete="off" value={credential} onChange={e=>setCredential(e.target.value)} required/></>}{previousVideo&&<fieldset className="session-choice"><legend>For a new stream URL</legend><label><input type="radio" name="sessionChoice" checked={sessionChoice==='continue'} onChange={()=>setSessionChoice('continue')}/> Continue previous session</label><label><input type="radio" name="sessionChoice" checked={sessionChoice==='fresh'} onChange={()=>setSessionChoice('fresh')}/> Start fresh</label><small>Continue keeps scores, viewer levels, and subscriber bonus history from <a href={`https://youtube.com/watch?v=${previousVideo}`} target="_blank" rel="noreferrer">the previous stream</a>. Previously connected URLs resume their saved session.</small></fieldset>}<button className="secondary" disabled={busy}>{busy?'Connecting…':'Connect live chat'}</button>{state.mode==='live'&&<button type="button" className="text-button" onClick={()=>void action('disconnect').catch(e=>setNotice(e.message))}>Disconnect chat</button>}</form>:<p>This preview uses demo votes. Connect real YouTube chat from the local Flag Arena app on your streaming PC.</p>}<div className="connection-info"><span className="status-dot"/>{state.status}</div></div>
 
@@ -178,7 +187,7 @@ export default function Home(){
 
 {!local&&<p>Open the local app to configure subscriber tracking.</p>}</section>
 
-<section id="studio-audio" hidden={studioTab!=="audio"} aria-label="Audio controls"> <AudioControls settings={state.audio??defaultAudio} save={async settings=>{await action('audio',settings);}} test={async()=>{await action('audio/test');}}/>
+<section id="studio-audio" hidden={studioTab!=="audio"} aria-label="Audio controls"><DonationEffectsControls settings={state.donationEffects??defaultDonationEffects} demo={state.mode==='demo'} save={async settings=>{await action('donation-effects',settings);}} test={async country=>{await action('donation-effects/test',{country});}}/> <AudioControls settings={state.audio??defaultAudio} save={async settings=>{await action('audio',settings);}} test={async()=>{await action('audio/test');}}/>
 
 </section>
 

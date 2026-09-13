@@ -18,6 +18,8 @@ try {
  $arenaLines['and'] = 'and'
  for ($arenaOthers=2; $arenaOthers -lt $arenaCountries.Count; $arenaOthers++) { $arenaLines["and-$arenaOthers-others"] = "and $arenaOthers other countries!" }
  $arenaLines['enters-the-top-five'] = 'enters the top five!'
+ $arenaLines['donation-thank-you'] = 'Thank you'
+ $arenaLines['donation-super-chat'] = 'for your Super Chat.'
  $arenaLines['wins'] = 'wins!'
  $arenaLines['thanks-subscribing'] = 'Thank you for subscribing!'
  $arenaLines['subscriber-bonus'] = 'gets fifty points!'

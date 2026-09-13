@@ -83,7 +83,7 @@ export function createAnalytics(store: ArenaDatabase) {
     const chosen =
       before ?? (next ? country(id, event.viewerId, Number(next.time)) : null);
     // Retain integer micros as text so protobuf uint64 values never lose precision.
-    sql(
+    const inserted = sql(
       'INSERT OR IGNORE INTO donations(stream,id,viewer_id,name,time,amount_micros,currency,comment,country) VALUES(?,?,?,?,?,?,?,?,?)',
     ).run(
       id,
@@ -96,6 +96,7 @@ export function createAnalytics(store: ArenaDatabase) {
       event.comment,
       chosen,
     );
+    return !!inserted.changes;
   }
   function summary(
     id: string,

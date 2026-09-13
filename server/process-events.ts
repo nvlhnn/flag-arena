@@ -11,10 +11,11 @@ export function processEvents(
   voteSince: number,
   streamSince: number,
   now = Date.now(),
+  onDonation?: (id: string, state: ArenaState, avatar: string | undefined) => ArenaState | void,
 ) {
-  const next = copyForBatch(state),
-    seen = new Set(state.seen);
-  let accepted = 0;
+  let next = copyForBatch(state);
+  const seen = new Set(state.seen);
+  let accepted = 0, donated = false;
   const items = [...(batch.items ?? [])].sort(
     (a, b) =>
       Date.parse(a.snippet?.publishedAt ?? '') -
@@ -29,7 +30,7 @@ export function processEvents(
     const name = (item.authorDetails?.displayName ?? 'Viewer').slice(0, 60);
     if (snippet?.type === 15 && snippet.superChatDetails) {
       const paid = snippet.superChatDetails;
-      analytics.donation(stream, {
+      const inserted = analytics.donation(stream, {
         id: item.id,
         viewerId,
         name,
@@ -38,6 +39,10 @@ export function processEvents(
         currency: paid.currency ?? '',
         comment: (paid.userComment ?? '').slice(0, 2000),
       });
+      if (inserted) {
+        const updated = onDonation?.(item.id, next, item.authorDetails?.profileImageUrl);
+        if (updated && updated !== next) { next = updated; donated = true; }
+      }
     }
     if (
       snippet?.type !== 1 ||
@@ -64,5 +69,5 @@ export function processEvents(
       analytics.vote(stream, next.recent[0]);
     }
   }
-  return { state: accepted ? next : state, accepted };
+  return { state: accepted || donated ? next : state, accepted };
 }

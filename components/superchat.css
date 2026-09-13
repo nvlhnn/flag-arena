@@ -1,0 +1,50 @@
+.layout-options{display:grid;grid-template-columns:1fr 1fr;gap:8px}.layout-options button[aria-pressed="true"]{border-color:#d5b671;background:#30291c;color:#ffe2a0}
+.arena.arena-superchat{grid-template-rows:7% 4% 14% 72% 3%;gap:0;background:radial-gradient(ellipse at 15% 0,#252129,transparent 42%),#0b0d14}
+.arena-superchat .reward-strip{grid-row:1;gap:1.4cqw;padding:.5cqw .3cqw 1cqw;grid-template-columns:1.2fr 1fr}
+.arena-superchat .reward-strip>div{border:1px solid #4e4535;border-radius:1.7cqw;background:linear-gradient(120deg,#29271f,#161920);justify-content:flex-start;position:relative;isolation:isolate;overflow:hidden;padding:1.5cqw 2cqw;gap:2cqw;box-shadow:inset 0 1px #fff1ba10}
+.arena-superchat .reward-strip>div.superchat-subscribe{border-color:#294346;background:linear-gradient(125deg,#172b2a,#141b24)}
+.arena-superchat .reward-strip .superchat-reward-icon{display:grid;place-items:center;flex-shrink:0;width:8.5cqw;height:8.5cqw;border-radius:2.5cqw;background:linear-gradient(135deg,#efd08c,#ab8742);box-shadow:inset 0 1px #fff5ce80,0 .8cqw 2cqw #0003}
+.arena-superchat .reward-strip .superchat-reward-icon svg{width:5cqw;height:5cqw;color:#382807;filter:none}
+.arena-superchat .superchat-subscribe .superchat-reward-icon{background:linear-gradient(135deg,#9de4cd,#4d9c8c);width:7cqw;height:7cqw;border-radius:50%}
+.arena-superchat .superchat-subscribe .superchat-reward-icon svg{color:#102f2d;width:4.2cqw;height:4.2cqw}
+.arena-superchat .reward-strip span:not(.superchat-reward-icon){min-width:0;display:block;line-height:1.2}
+.arena-superchat .reward-strip small{font-size:1.8cqw;letter-spacing:.18cqw;color:#d7c59f;font-weight:800;display:block;white-space:nowrap}
+.arena-superchat .reward-strip b{font-size:5.2cqw;letter-spacing:-.15cqw;color:#ffe3a2;line-height:1.08;margin:.55cqw 0 .4cqw;white-space:nowrap}
+.arena-superchat .reward-strip b em{font-size:2.4cqw;font-weight:700;letter-spacing:0;font-style:normal;color:#beac85}
+.arena-superchat .reward-strip i{font-size:1.9cqw;color:#abafb5;display:block;font-weight:500;font-style:normal;white-space:nowrap}
+.arena-superchat .superchat-subscribe b{color:#a5f4d3;font-size:4.8cqw}.arena-superchat .superchat-subscribe small{color:#9abbba}.arena-superchat .superchat-subscribe b em{color:#86b9a9}
+.arena-superchat .superchat-reward::before{content:'';position:absolute;inset:-50% -60%;pointer-events:none;background:linear-gradient(110deg,transparent 44%,#fff7ba08 49%,#fff4bb28 50%,transparent 56%);animation:superchat-shimmer 9s ease-in-out infinite;z-index:-1}
+.arena-superchat .stream-chat{grid-row:2;gap:1.5cqw;padding:0 1.8cqw;margin:.4cqw .3cqw .9cqw;border:1px solid #2d3542;border-radius:1.2cqw;background:#121820;min-width:0}
+.arena-superchat .chat-heading{display:block;font-size:1.65cqw;font-weight:800;letter-spacing:.12cqw;color:#7d99a7;max-width:10cqw;line-height:1.25;flex-shrink:0}
+.arena-superchat .stream-chat-row{justify-content:flex-start;gap:1.5cqw;min-width:0}.arena-superchat .stream-chat-row>div{min-width:0;flex:1}.arena-superchat .stream-chat-row b{font-size:2.7cqw;color:#eff6f5;max-width:100%;text-shadow:none;display:flex;align-items:center;gap:1cqw}.arena-superchat .viewer-level{font-size:1.6cqw;background:#213d38;color:#a8e4cc;border-radius:.7cqw;padding:.45cqw .7cqw;white-space:nowrap;flex-shrink:0}
+.arena-superchat .stream-chat-row>strong{font-size:3.2cqw;color:#a4f0d0;white-space:nowrap}.arena-superchat .stream-chat-row>.fi{display:block;width:4.8cqw;line-height:3.3cqw;border-radius:.4cqw;flex-shrink:0}.arena-superchat .chat-placeholder{font-size:2.1cqw;color:#879da8;line-height:1.3}
+.arena-superchat .flag-grid{grid-row:4;grid-template-columns:repeat(9,minmax(0,1fr));grid-template-rows:repeat(11,minmax(0,1fr));padding-top:1.4cqw;gap:.6cqw .55cqw}.arena-superchat .arena-footer{grid-row:5}
+.superchat-rail{grid-row:3;position:relative;isolation:isolate;min-width:0;min-height:0;border:1px solid #655337;border-radius:1.8cqw;background:radial-gradient(ellipse at 30% 0,#5f482929,transparent 75%),#12151c;box-shadow:inset 0 1px #efd19524,0 .5cqw 2cqw #0002;overflow:hidden;display:flex;flex-direction:column;margin:.3cqw}
+.superchat-rail::before{content:'';position:absolute;inset:-50% -60%;pointer-events:none;background:linear-gradient(110deg,transparent 43%,#fff7ba0a 49%,#fff4bb18 50%,transparent 57%);animation:superchat-shimmer 11s ease-in-out infinite;z-index:-1}
+.superchat-rail-heading{display:flex;justify-content:space-between;align-items:center;gap:1cqw;padding:1.1cqw 2.2cqw .5cqw;flex-shrink:0;min-height:4.6cqw}
+.superchat-rail-heading>span{display:flex;align-items:center;gap:1cqw;font-size:2.1cqw;letter-spacing:.19cqw;color:#e7c78c;font-weight:850;white-space:nowrap}.superchat-rail-heading svg{width:3cqw;height:3cqw;color:#d6ad63;fill:#d6ad631f}.superchat-rail-heading>small{font-size:1.55cqw;letter-spacing:.1cqw;color:#a09b8f;white-space:nowrap;font-weight:600}
+.superchat-window{overflow:hidden;position:relative;margin:0 1.8cqw;flex:1;display:flex;align-items:center;min-height:0;padding:1.5cqw 0 2.2cqw}
+.superchat-track{width:100%;display:grid;grid-auto-flow:column;grid-auto-columns:calc((100% - 2.4cqw)/3);gap:1.2cqw;flex-shrink:0;align-items:center;will-change:transform;transition:none}
+.superchat-card{position:relative;min-width:0;height:17.8cqw;display:flex;align-items:center;gap:1.25cqw;padding:1.7cqw 1.1cqw;border:1px solid #706043;border-radius:1.4cqw;background:linear-gradient(125deg,#373023,#1b2027);box-shadow:inset 0 1px #ffedbc15,0 .5cqw 1.5cqw #0002;color:#fff}
+.superchat-portrait{position:relative;flex:0 0 39%;height:12cqw;min-width:0;border:1px solid #d3b473;border-radius:1.1cqw;box-shadow:0 0 0 .6cqw #d4b16f0b}
+.superchat-portrait>img,.superchat-avatar-fallback{display:block;width:100%;height:100%;object-fit:cover;background:linear-gradient(150deg,#39344e,#202334);border-radius:1cqw}
+.superchat-avatar-fallback{display:grid;place-items:center}.superchat-avatar-fallback svg{width:65%;height:65%;color:#cfc7b4}
+.superchat-crown{position:absolute;top:-1.4cqw;left:50%;transform:translateX(-50%);display:grid;place-items:center;width:3.5cqw;height:2.9cqw;border-radius:.6cqw;background:#d7b776;box-shadow:0 .3cqw .8cqw #0004}.superchat-crown svg{width:2.3cqw;height:2.3cqw;color:#4b3610;stroke-width:1.6}
+.superchat-portrait>.fi{position:absolute;bottom:-.85cqw;right:-.7cqw;width:4.3cqw;line-height:3cqw;border:.25cqw solid #ddc999;border-radius:.5cqw;background-size:cover;box-shadow:0 .4cqw 1cqw #0005}
+.superchat-card-copy{min-width:0;flex:1;display:flex;flex-direction:column;justify-content:center;gap:.8cqw}
+.superchat-donor{font-size:2.25cqw;font-weight:750;color:#e3e4df;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;line-height:1.2}
+.superchat-amount{font-size:3.8cqw;line-height:1;font-weight:850;color:#ffe6ab;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;letter-spacing:-.12cqw}
+.superchat-points{font-size:2.75cqw;font-weight:850;line-height:1;color:#9befb9;white-space:nowrap;letter-spacing:-.08cqw}.superchat-points small{font-size:1.2cqw;font-weight:650;letter-spacing:.06cqw;color:#72b58c}.superchat-points.superchat-pending{font-size:1.85cqw;color:#aaa89e;white-space:normal;line-height:1.2;letter-spacing:0}
+.superchat-empty{display:flex;align-items:center;justify-content:center;gap:3cqw;flex:1;margin:1cqw 2cqw 2.3cqw;border:1px dashed #72613d55;border-radius:1.3cqw;background:linear-gradient(110deg,#d6b77108,transparent)}.superchat-empty-icon{display:grid;place-items:center;width:8cqw;height:8cqw;border:1px solid #c5a25c33;border-radius:50%;background:#c8a35b0a;color:#c7a568}.superchat-empty-icon svg{width:4cqw;height:4cqw}.superchat-empty div{display:flex;flex-direction:column;gap:1cqw}.superchat-empty b{font-size:3cqw;color:#ded5c2;font-weight:650}.superchat-empty div>span{font-size:2cqw;color:#8a939e}
+.superchat-glints{position:absolute;inset:0;pointer-events:none;z-index:-1}.superchat-glints i{position:absolute;width:.8cqw;height:.8cqw;background:#ffebae;clip-path:polygon(50% 0,62% 38%,100% 50%,62% 62%,50% 100%,38% 62%,0 50%,38% 38%);animation:superchat-sparkle 7s ease-in-out infinite;top:17%;left:52%}.superchat-glints i:nth-child(2){left:28%;top:90%;animation-delay:2s}.superchat-glints i:nth-child(3){left:91%;top:58%;animation-delay:4s}
+@keyframes superchat-shimmer{0%,15%{transform:translateX(-60%)}75%,100%{transform:translateX(60%)}}@keyframes superchat-sparkle{0%,30%,100%{opacity:0;transform:scale(.2)}50%,60%{opacity:.6;transform:scale(1)}}
+@media(prefers-reduced-motion:reduce){.superchat-rail::before,.arena-superchat .superchat-reward::before,.superchat-glints{display:none}.superchat-track{will-change:auto}}
+
+.superchat-card{--medal:#777f8a;border-color:var(--medal);background:linear-gradient(125deg,#242a32,#171c24);padding-top:2.9cqw}
+.superchat-card.superchat-rank-1{--medal:#f4cf76;background:linear-gradient(125deg,#514020,#242019);box-shadow:inset 0 0 0 .2cqw #f4cf7633,0 0 1.5cqw #f4cf7633}
+.superchat-card.superchat-rank-2{--medal:#cbd8e8;background:linear-gradient(125deg,#354150,#1e242c);box-shadow:inset 0 0 0 .2cqw #cbd8e822}
+.superchat-card.superchat-rank-3{--medal:#d5a17c;background:linear-gradient(125deg,#473328,#241e1b);box-shadow:inset 0 0 0 .2cqw #d5a17c22}
+.superchat-rank{position:absolute;top:.5cqw;left:1cqw;font-size:1.85cqw;font-weight:900;color:var(--medal);line-height:1}
+.superchat-card .superchat-portrait{height:10cqw;border-color:var(--medal)}
+.superchat-card-copy{gap:.75cqw}.superchat-donation-count{font-size:1.55cqw;color:#b7b9ba;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.superchat-card .superchat-amount{font-size:3.3cqw}.superchat-card .superchat-points{font-size:2.45cqw}
