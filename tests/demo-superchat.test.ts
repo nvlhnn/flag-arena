@@ -29,8 +29,9 @@ void test('prior country is used for blank messages, explicit messages override 
  state=addDemoSuperChat(state,{...input,message:''},3000,'a');
  state=addDemoSuperChat(state,{...input,currency:'EUR',amount:'2.5',usdAmount:'3'},3100,'b');
  assert.equal(state.scores.BR,5001);assert.equal(state.scores.ID,3000);
- const card=demoSupporters(state.demoSuperChats).cards[0];assert.equal(card.donationCount,2);assert.equal(card.country,null);
+ const card=demoSupporters(state.demoSuperChats).cards[0];assert.equal(card.donationCount,2);assert.equal(card.country,'BR');
  assert.deepEqual(card.amounts,[{currency:'EUR',amountMicros:'2500000'},{currency:'USD',amountMicros:'5000000'}]);
+ assert.equal(card.country,'BR');
 });
 void test('unassigned test donations close with the round and never carry points into the next',()=>{
  let state=addDemoSuperChat(initialState(),{...input,message:''},1000,'a');
