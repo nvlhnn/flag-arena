@@ -6,9 +6,9 @@ import {KeyPool} from '../server/key-pool.ts';
 const ledger=():SubscriberLedger=>({ownerId:'owner',baselineAt:1000,known:{},pending:{}});
 const sub={id:'viewer',name:'New Viewer',publishedAt:2000};
 const voted=()=>acceptVote(initialState(),{id:'vote',viewerId:'viewer',viewer:'Viewer',text:'Indonesia',time:1500}).state;
-test('subscriber gets exactly 50 points on their country, including after reload',()=>{
- const first=ingestSubscribers(voted(),ledger(),[sub],3000);assert.equal(first.state.scores.ID,51);assert.equal(first.state.subscriberAlerts?.[0].points,50);
- const restored=JSON.parse(JSON.stringify(first));const replay=ingestSubscribers(restored.state,restored.ledger,[sub],4000);assert.equal(replay.state.scores.ID,51);
+test('subscriber gets exactly 100 points on their country, including after reload',()=>{
+ const first=ingestSubscribers(voted(),ledger(),[sub],3000);assert.equal(first.state.scores.ID,101);assert.equal(first.state.subscriberAlerts?.[0].points,100);
+ const restored=JSON.parse(JSON.stringify(first));const replay=ingestSubscribers(restored.state,restored.ledger,[sub],4000);assert.equal(replay.state.scores.ID,101);
 });
 test('existing or undated subscriptions are baselined without rewards',()=>{
  const result=ingestSubscribers(voted(),ledger(),[{...sub,publishedAt:999},{...sub,id:'undated',publishedAt:NaN}],3000);assert.equal(result.state.scores.ID,1);assert.equal(result.state.subscriberAlerts,undefined);
@@ -16,7 +16,7 @@ test('existing or undated subscriptions are baselined without rewards',()=>{
 test('pending subscriber gets bonus on next vote only in the same open round',()=>{
  const pending=ingestSubscribers(initialState(),ledger(),[sub],3000);assert.equal(pending.state.subscriberAlerts?.[0].points,0);
  const state=acceptVote(pending.state,{id:'vote',viewerId:sub.id,viewer:sub.name,text:'Brazil',time:3500}).state;
- const granted=applyPendingSubscribers(state,pending.ledger,4000);assert.equal(granted.state.scores.BR,51);assert.deepEqual(granted.ledger.pending,{});
+ const granted=applyPendingSubscribers(state,pending.ledger,4000);assert.equal(granted.state.scores.BR,101);assert.deepEqual(granted.ledger.pending,{});
  const expired=applyPendingSubscribers({...state,match:{phase:'open',openedAt:3600}},pending.ledger,4000);assert.equal(expired.state.scores.BR,1);assert.deepEqual(expired.ledger.pending,{});
 });
 test('closed matches and expired countdowns cannot receive subscriber points',()=>{

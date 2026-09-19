@@ -1,6 +1,7 @@
 import {queueDonation,defaultDonationEffects,type DonationEffects} from '../lib/donation-effects.ts';
 import type { ArenaDatabase } from './database.ts';
 import type { ArenaState } from '../lib/arena.ts';
+import { parseDonationCountry } from '../lib/arena.ts';
 import { safeAvatar, superChatPoints, type SuperChatPage, type SupporterPage } from '../lib/superchat.ts';
 
 export function createSuperChats(db: ArenaDatabase, getEffects:()=>DonationEffects=()=>defaultDonationEffects) {
@@ -19,7 +20,7 @@ export function createSuperChats(db: ArenaDatabase, getEffects:()=>DonationEffec
     const open = state.mode === 'live' && state.match?.phase !== 'results' && now < (state.match?.endsAt ?? Infinity)
       && Number(donation.time) >= Math.max(since, round);
     const viewer = state.viewers?.[String(donation.viewer_id)];
-    const country = donation.country ?? ((viewer?.lastVoteAt ?? -1) >= round ? viewer?.lastCountry : undefined) ?? null;
+    const country = parseDonationCountry(String(donation.comment)) ?? ((viewer?.lastVoteAt ?? -1) >= round ? viewer?.lastCountry : undefined) ?? null;
     let status = open ? 'pending' : 'closed';
     if (donation.currency === 'USD' && donation.usd_micros === null) {
       const amount = BigInt(String(donation.amount_micros));
@@ -41,7 +42,7 @@ export function createSuperChats(db: ArenaDatabase, getEffects:()=>DonationEffec
     let next = state;
     for (const event of pending) {
       const viewer = state.viewers?.[String(event.viewer_id)];
-      const country = event.country ?? event.donation_country ?? ((viewer?.lastVoteAt ?? -1) >= round ? viewer?.lastCountry : undefined);
+      const country = event.country ?? ((viewer?.lastVoteAt ?? -1) >= round ? viewer?.lastCountry : undefined);
       if (!country) continue;
       if (event.country === null) db.sql('UPDATE superchat_awards SET country=? WHERE stream=? AND id=?').run(country, event.stream, event.id);
       if (event.usd_micros === null) continue;
@@ -93,8 +94,15 @@ export function createSuperChats(db: ArenaDatabase, getEffects:()=>DonationEffec
     ) SELECT *,CAST(usd_total AS TEXT) usd_text FROM ranked ORDER BY usd_total DESC,first_at,viewer_id LIMIT ? OFFSET ?`;
     const rows=db.sql(query).all(session,limit,start);
     if(rows.length<limit)rows.push(...db.sql(query).all(session,limit-rows.length,0));
+    const amountsFor=(viewerId:string)=>{
+      const totals=new Map<string,bigint>();
+      for(const entry of db.sql('SELECT d.currency,d.amount_micros FROM superchat_awards a JOIN donations d ON d.stream=a.stream AND d.id=a.id WHERE a.session=? AND d.viewer_id=?').all(session,viewerId)){
+        const currency=String(entry.currency);totals.set(currency,(totals.get(currency)??BigInt(0))+BigInt(String(entry.amount_micros)));
+      }
+      return [...totals].sort(([a],[b])=>a.localeCompare(b)).map(([currency,amount])=>({currency,amountMicros:String(amount)}));
+    };
     return {session,total,offset:start,cards:rows.map(row=>({id:String(row.viewer_id),name:String(row.name),avatar:String(row.avatar),country:row.country?String(row.country):null,
-      rank:row.rank===null?null:Number(row.rank),usdMicros:row.usd_text===null?null:String(row.usd_text),points:Number(row.points),donationCount:Number(row.donations),pendingCount:Number(row.pending)}))};
+      rank:row.rank===null?null:Number(row.rank),usdMicros:row.usd_text===null?null:String(row.usd_text),amounts:amountsFor(String(row.viewer_id)),points:Number(row.points),donationCount:Number(row.donations),pendingCount:Number(row.pending)}))};
   }
   return { capture, apply, page, supporters };
 }

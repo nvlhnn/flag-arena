@@ -1,3 +1,4 @@
+import type {DemoSuperChat} from './demo-superchat';
 import type {DonationEffects,DonationCelebration} from './donation-effects';
 import type {SubscriberAlert} from './subscribers';
 import type {AudioSettings} from './audio-events';
@@ -11,7 +12,7 @@ export type ViewerProgress={name?:string;countryPoints?:Record<string,number>;xp
 export type Vote={basePoints?:number;multiplier?:number;level?:number;points?:number;levelUp?:boolean;id:string;viewerId:string;viewer:string;text:string;time:number};
 export const POINTS_PER_VOTE=1;
 export type Match={phase:'open'|'countdown'|'results';openedAt?:number;endsAt?:number;results?:{code:string;name:string;points:number}[]};
-export type ArenaState={donationEffects?:DonationEffects;donationEvents?:DonationCelebration[];overlayLayout?:'current'|'superchat';superchatSession?:string;topVoters?:Record<string,{name:string;points:number}>;catchUpEnabled?:boolean;viewers?:Record<string,ViewerProgress>;subscriberAlerts?:SubscriberAlert[];audio?:AudioSettings;audioTest?:{id:string;at:number};match?:Match;scoreVersion?:2;mode:'demo'|'live';connected?:boolean;status:string;scores:Record<string,number>;recent:(Vote&{code:string})[];cooldowns:Record<string,number>;seen:string[]};
+export type ArenaState={demoSuperChats?:DemoSuperChat[];donationEffects?:DonationEffects;donationEvents?:DonationCelebration[];overlayLayout?:'current'|'superchat';superchatSession?:string;topVoters?:Record<string,{name:string;points:number}>;catchUpEnabled?:boolean;viewers?:Record<string,ViewerProgress>;subscriberAlerts?:SubscriberAlert[];audio?:AudioSettings;audioTest?:{id:string;at:number};match?:Match;scoreVersion?:2;mode:'demo'|'live';connected?:boolean;status:string;scores:Record<string,number>;recent:(Vote&{code:string})[];cooldowns:Record<string,number>;seen:string[]};
 export const initialState=():ArenaState=>({catchUpEnabled:true,scoreVersion:2,mode:'demo',status:'Ready for a demo. YouTube is not connected.',scores:{},viewers:{},recent:[],cooldowns:{},seen:[]});
 const normalize=(s:string)=>s.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
 const aliases=new Map<string,string>();
@@ -23,6 +24,19 @@ export function parseCountry(text:string):string|undefined{
  if(stripped&&!word)return undefined;
  const candidates=new Set([...flags,...(word?[word]:[])]);if(candidates.size!==1)return undefined;
  const code=[...candidates][0];return countries.some(c=>c.code===code)?code:undefined;
+}
+// Paid messages may include a greeting around the country. Prefer longer names
+// (North Korea over Korea), and never guess between multiple different countries.
+export function parseDonationCountry(text:string):string|undefined{
+ const codes=new Set<string>();
+ for(const flag of text.match(/[\u{1F1E6}-\u{1F1FF}]{2}/gu)??[]){const code=parseCountry(flag);if(code)codes.add(code);}
+ for(const command of text.matchAll(/!vote\s+([a-z]{2})\b/gi)){const code=parseCountry(command[0]);if(code)codes.add(code);}
+ let words=' '+normalize(text)+' ';
+ for(const [name,code] of [...aliases].sort((a,b)=>b[0].length-a[0].length)){
+  const token=' '+name+' ';
+  if(words.includes(token)){codes.add(code);while(words.includes(token))words=words.replace(token,' ');}
+ }
+ return codes.size===1?[...codes][0]:undefined;
 }
 export function catchUpMultiplier(state:ArenaState,code:string):number {
  if(state.catchUpEnabled===false)return 1;

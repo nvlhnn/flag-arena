@@ -8,7 +8,7 @@ export function subscriberLedgerForStream(ledger:SubscriberLedger|undefined,stre
  if(ledger.streamId===streamId)return ledger;
  return {ownerId:ledger.ownerId,streamId,baselineAt:now,known:{},pending:{},scanJobs:[]};
 }
-export const subscriberBonus=50;
+export const subscriberBonus=100;
 export const subscriberAlertDurationMs=3000; // 0.5s enter + 2s hold + 0.5s exit.
 function open(state:ArenaState,now:number){return state.match?.phase!=='results'&&(!state.match?.endsAt||now<state.match.endsAt);}
 function latestCountry(state:ArenaState,id:string,round:number){

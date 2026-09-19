@@ -22,7 +22,7 @@ export function rankingAnnouncement(previous:ArenaState,next:ArenaState):Announc
 }
 export function announcementClips(event:Announcement){
  if(event.kind==='jump'){const passed=event.passed!;return passed.length===2?[event.country,'overtakes',passed[0],'and',passed[1]]:[event.country,'overtakes',passed[0],`and-${passed.length-1}-others`];}
- if(event.kind==='subscriber')return event.country?['thanks-subscribing',event.country,'subscriber-bonus']:['thanks-subscribing'];
+ if(event.kind==='subscriber')return event.country?['thanks-subscribing',event.country,'subscriber-bonus-100']:['thanks-subscribing'];
  return event.kind==='overtake'?[event.country,'overtakes',event.other!]:[event.country,event.kind==='lead'?'takes-the-lead':event.kind==='top5'?'enters-the-top-five':'wins'];
 }
 

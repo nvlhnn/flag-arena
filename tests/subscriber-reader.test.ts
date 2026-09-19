@@ -155,7 +155,7 @@ void test('a failed catch-up request preserves the committed page and cursor acr
         commit,
       ),
     );
-    assert.equal(state.scores.ID, 51);
+    assert.equal(state.scores.ID, 101);
     db.close();
     db = openDatabase(dir);
     saved = db.load()!.subscriberLedger as SubscriberLedger;
@@ -177,7 +177,7 @@ void test('a failed catch-up request preserves the committed page and cursor acr
       commit,
     );
     assert.deepEqual(pages, ['head', 'next']);
-    assert.equal(state.scores.ID, 51);
+    assert.equal(state.scores.ID, 101);
     assert.deepEqual(saved.scanJobs, []);
   } finally {
     globalThis.fetch = original;

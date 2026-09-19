@@ -22,7 +22,7 @@ try {
  $arenaLines['donation-super-chat'] = 'for your Super Chat.'
  $arenaLines['wins'] = 'wins!'
  $arenaLines['thanks-subscribing'] = 'Thank you for subscribing!'
- $arenaLines['subscriber-bonus'] = 'gets fifty points!'
+ $arenaLines['subscriber-bonus-100'] = 'gets one hundred points!'
  for ($arenaJump=2; $arenaJump -lt $arenaCountries.Count; $arenaJump++) { $arenaLines["moves-up-$arenaJump"] = "moves up $arenaJump places!" }
  foreach ($arenaEntry in $arenaLines.GetEnumerator()) {
   $arenaSynth.SetOutputToWaveFile((Join-Path $arenaOutput ($arenaEntry.Key + '.wav')), $arenaFormat)

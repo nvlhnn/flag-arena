@@ -1,5 +1,6 @@
 import type { ArenaDatabase } from './database.ts';
 import type { ArenaState } from '../lib/arena.ts';
+import { parseDonationCountry } from '../lib/arena.ts';
 import type { StreamAnalytics } from '../lib/analytics.ts';
 
 export type Donation = {
@@ -74,7 +75,7 @@ export function createAnalytics(store: ArenaDatabase) {
       !/^([A-Z]{3})$/.test(event.currency)
     )
       throw new Error('Invalid Super Chat amount or currency');
-    const before = country(id, event.viewerId, event.time);
+    const before = parseDonationCountry(event.comment) ?? country(id, event.viewerId, event.time);
     const next = before
       ? undefined
       : sql(

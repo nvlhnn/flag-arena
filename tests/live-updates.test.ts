@@ -53,6 +53,6 @@ void test('subscriber country remains available after its vote leaves the visual
     [{ id: 'early', name: 'early', publishedAt: 2000 }],
     2000,
   );
-  assert.equal(result.state.scores.ID, 51);
+  assert.equal(result.state.scores.ID, 101);
   assert.deepEqual(result.ledger.pending, {});
 });

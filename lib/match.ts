@@ -13,5 +13,5 @@ export function settleMatch(state:ArenaState,now=Date.now()):ArenaState{
 }
 export function nextMatch(state:ArenaState,reset:boolean,now=Date.now()):ArenaState{
  if(state.match?.phase!=='results')throw new Error('Wait for the match results first.');
- return {...state,donationEvents:[],scores:reset?{}:state.scores,recent:[],viewers:{},match:{phase:'open',openedAt:now}};
+ return {...state,demoSuperChats:state.demoSuperChats?.map(card=>card.status==='pending'?{...card,status:'closed'}:card),donationEvents:[],scores:reset?{}:state.scores,recent:[],viewers:{},match:{phase:'open',openedAt:now}};
 }

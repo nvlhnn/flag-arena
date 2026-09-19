@@ -1,3 +1,4 @@
+import {addDemoSuperChat,applyDemoSuperChats} from '../lib/demo-superchat.ts';
 import {defaultDonationEffects,validDonationEffects,queueDonation,type DonationEffects} from '../lib/donation-effects.ts';
 import {createDonationVoice} from './donation-voice.ts';
 import {createSuperChats} from './superchat.ts';
@@ -100,7 +101,7 @@ function beginStreaming(pool:KeyPool,chat:string){
    const previous={state,live,demo,ledger,resume};let accepted=0;
    try{database.transaction(()=>{
     const tracked=database.sql('SELECT tracked_from FROM streams WHERE id=?').get(savedVideo);
-    const processed=processEvents(analytics,savedVideo,state,batch,current.since,Number(tracked?.tracked_from??current.since),Date.now(),(id,currentState,avatar)=>{superChats.capture(savedVideo,id,currentState,avatar,current.since,Date.now());return superChats.apply(currentState,savedVideo);});
+    const processed=processEvents(analytics,savedVideo,state,batch,current.since,Number(tracked?.tracked_from??current.since),Date.now(),(id,currentState,avatar)=>{superChats.capture(savedVideo,id,currentState,avatar,current.since,Date.now());return superChats.apply(currentState,savedVideo);},currentState=>superChats.apply(currentState,savedVideo));
     state=superChats.apply(processed.state,savedVideo);accepted=processed.accepted;
     if(ledger&&ledger.ownerId===savedVideoOwner){const applied=applyPendingSubscribers(state,ledger);state=applied.state;ledger=applied.ledger;}
     if(batch.nextPageToken)resume={chat,since:current.since,page:batch.nextPageToken};
@@ -190,12 +191,13 @@ createServer(async(req,res)=>{
     if(!countries.some(country=>country.code===body.country))throw new Error('Choose a valid country.');
     state={...state,donationEvents:queueDonation(state.donationEvents??[],{id:'preview:'+Date.now(),name:'Alex',country:body.country,points:5000,amountMicros:'5000000',currency:'USD',preview:true},donationEffects.duration,Date.now())};publish();json(res,200,{ok:true});return;
    }
+   if(url.pathname==='/api/superchats/test'){state=addDemoSuperChat({...state,donationEffects},body);publish();json(res,200,{ok:true});return;}
    if(url.pathname==='/api/layout'){if(!['current','superchat'].includes(body.layout))throw new Error('Choose Current or Super Chat layout.');overlayLayout=body.layout;publish();json(res,200,{ok:true});return;}
    if(url.pathname==='/api/audio'){if(typeof body.muted!=='boolean'||typeof body.voice!=='boolean'||typeof body.volume!=='number'||!Number.isFinite(body.volume)||body.volume<0||body.volume>1)throw new Error('Invalid audio settings.');if(body.overtakeStyle!==undefined&&!['grouped','all'].includes(String(body.overtakeStyle)))throw new Error('Invalid announcement style.');audio={overtakeStyle:body.overtakeStyle as 'grouped'|'all'|undefined,muted:body.muted,voice:body.voice,volume:body.volume};publish();json(res,200,{ok:true});return;}
    if(url.pathname==='/api/audio/test'){audioTest={id:crypto.randomUUID(),at:Date.now()};publish();json(res,200,{ok:true});return;}
    if(url.pathname==='/api/match/finish'){state=finishMatch(state);publish();json(res,200,{ok:true});return;}
    if(url.pathname==='/api/match/next'){if(typeof body.reset!=='boolean')throw new Error('Choose reset or keep scores.');state=nextMatch(state,body.reset);if(ledger)ledger={...ledger,pending:{}};if(state.mode==='live'&&resume){resume={...resume,since:state.match!.openedAt!};if(session)session.since=resume.since;}publish();json(res,200,{ok:true});return;}
-   if(url.pathname==='/api/vote'){if(state.mode==='live')throw new Error('Test votes are disabled while live scores are displayed. Disconnect first.');if(typeof body.viewer!=='string'||!body.viewer.trim()||body.viewer.length>60||typeof body.text!=='string'||body.text.length>200)throw new Error('Enter a viewer name and a country vote.');const result=acceptVote(state,{id:crypto.randomUUID(),viewerId:body.viewer.trim(),viewer:body.viewer.trim(),text:body.text,time:Date.now()});if(result.accepted){state=result.state;publish();}json(res,200,{accepted:result.accepted,reason:result.reason});return;}
+   if(url.pathname==='/api/vote'){if(state.mode==='live')throw new Error('Test votes are disabled while live scores are displayed. Disconnect first.');if(typeof body.viewer!=='string'||!body.viewer.trim()||body.viewer.length>60||typeof body.text!=='string'||body.text.length>200)throw new Error('Enter a viewer name and a country vote.');const result=acceptVote(state,{id:crypto.randomUUID(),viewerId:body.viewer.trim(),viewer:body.viewer.trim(),text:body.text,time:Date.now()});if(result.accepted){state=applyDemoSuperChats({...result.state,donationEffects});publish();}json(res,200,{accepted:result.accepted,reason:result.reason});return;}
    if(url.pathname==='/api/reset'){if(state.match&&state.match.phase!=='open')throw new Error('Use the next-match buttons after results.');if(ledger)ledger={...ledger,pending:{}};state={...initialState(),match:{phase:'open',openedAt:Date.now()},catchUpEnabled:state.catchUpEnabled,mode:state.mode,connected:state.connected,status:state.status,seen:state.seen,cooldowns:state.cooldowns};if(state.mode==='live'&&resume){resume={...resume,since:Date.now()};if(session)session.since=resume.since;}publish();json(res,200,{ok:true});return;}
    if(url.pathname==='/api/disconnect'){stop();state=demo;publish();json(res,200,{ok:true});return;}
    if(url.pathname==='/api/connect'){

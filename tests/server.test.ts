@@ -69,10 +69,10 @@ test('audio controls persist, validate input and deliver overlay test events',as
  assert.equal((await post('audio/test',{})).status,200);
  assert.ok((await(await fetch(`${base}/api/state`)).json()).audioTest.id);
 });
-test('subscriber demo adds 50, exposes no credentials, and OAuth needs setup',async()=>{
+test('subscriber demo adds 100, exposes no credentials, and OAuth needs setup',async()=>{
  const previous=await(await fetch(`${base}/api/state`)).json();
  assert.equal((await post('subscribers/test',{})).status,200);
- const state=await(await fetch(`${base}/api/state`)).json();assert.equal(state.scores.ID,(previous.scores.ID||0)+50);assert.equal(state.subscriberAlerts.at(-1).points,50);
+ const state=await(await fetch(`${base}/api/state`)).json();assert.equal(state.scores.ID,(previous.scores.ID||0)+100);assert.equal(state.subscriberAlerts.at(-1).points,100);
  const config=await(await fetch(`${base}/api/config`)).json();assert.equal(config.keyCount,0);assert.equal(config.subscribers.configured,false);assert.doesNotMatch(JSON.stringify(config),/access_token|refresh_token|client_secret|AIza/);
  assert.equal((await post('subscribers/connect',{})).status,400);
  assert.equal((await fetch(`${base}/api/subscribers/callback?state=bad&code=bad`)).status,400);

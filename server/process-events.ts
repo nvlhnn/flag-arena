@@ -12,6 +12,7 @@ export function processEvents(
   streamSince: number,
   now = Date.now(),
   onDonation?: (id: string, state: ArenaState, avatar: string | undefined) => ArenaState | void,
+  onVote?: (state: ArenaState) => ArenaState,
 ) {
   let next = copyForBatch(state);
   const seen = new Set(state.seen);
@@ -67,6 +68,7 @@ export function processEvents(
       seen.add(item.id);
       accepted++;
       analytics.vote(stream, next.recent[0]);
+      if (onVote) next = onVote(next);
     }
   }
   return { state: accepted || donated ? next : state, accepted };

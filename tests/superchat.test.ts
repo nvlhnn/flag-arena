@@ -9,7 +9,7 @@ import { createSuperChats } from '../server/superchat.ts';
 import { createExchangeRates } from '../server/exchange-rates.ts';
 import { processEvents } from '../server/process-events.ts';
 import { definition, type ChatBatch } from '../server/chat-stream.ts';
-import { initialState, type ArenaState } from '../lib/arena.ts';
+import { initialState, countries, parseDonationCountry, type ArenaState } from '../lib/arena.ts';
 import { nextMatch } from '../lib/match.ts';
 import { superChatPoints, safeAvatar, donationAmount } from '../lib/superchat.ts';
 import { createCleanup } from '../server/cleanup.ts';
@@ -25,7 +25,7 @@ function setup() {
     const before = state;
     try { db.transaction(() => {
       state = processEvents(analytics, video, state, { items }, since, 0, now,
-        (id, next, avatar) => { superChats.capture(video, id, next, avatar, since, now); return superChats.apply(next, video, now); }).state;
+        (id, next, avatar) => { superChats.capture(video, id, next, avatar, since, now); return superChats.apply(next, video, now); },next=>superChats.apply(next,video,now)).state;
       state = superChats.apply(state, video, now);
       db.save({ demo: initialState(), live: state, video });
     }); } catch (error) { state = before; throw error; }
@@ -194,4 +194,98 @@ void test('official avatar protobuf field survives wire decoding', () => {
   const method = (definition['youtube.api.v3.V3DataLiveChatMessageService'] as unknown as { StreamList: { responseSerialize: (value: unknown) => Buffer; responseDeserialize: (value: Buffer) => ChatBatch } }).StreamList;
   const restored = method.responseDeserialize(method.responseSerialize({ items: [donation('wire')] }));
   assert.equal(restored.items![0].authorDetails!.profileImageUrl, 'https://yt3.ggpht.com/avatar');
+});
+
+void test('paid messages select their country without adding chat XP or a second vote', () => {
+  for (const [comment, code] of [['Indonesia','ID'], ['Go Indonesia!','ID'], ['For 🇮🇩!','ID'], ['!vote ID','ID'], ['Brazil 🇧🇷','BR'], ['Go North Korea!','KP'], ['USA USA','US']]) {
+    const f=setup();
+    try {
+      f.batch([chat('old','Brazil',1000)]);
+      const paid=donation('paid');paid.snippet.superChatDetails.userComment=comment;
+      const state=f.batch([paid]);
+      assert.equal(f.superChats.page('one').cards[0].country,code,comment);
+      assert.equal(state.scores[code],5400+(code==='BR'?1:0),comment);
+      assert.equal(state.viewers!.donor.xp,1);
+      assert.equal(state.recent.length,1);
+      assert.equal(state.donationEvents![0].country,code);
+      assert.equal(f.batch([paid]).donationEvents!.length,1);
+    } finally { f.db.close(); }
+  }
+});
+
+void test('empty, unrelated, invalid and ambiguous paid messages wait for the donor’s own viewer chat', () => {
+  for (const comment of ['', 'Hello!', '!vote ZZ', 'Indonesia Brazil', '🇮🇩🇧🇷', 'Brazil 🇮🇩']) {
+    const f=setup();
+    try {
+      const paid=donation('paid');paid.snippet.superChatDetails.userComment=comment;
+      f.batch([paid,chat('other','Indonesia',2500,'other')]);
+      assert.equal(f.superChats.page('one').cards[0].status,'pending',comment);
+      f.batch([chat('unrelated','hello',3100),chat('ambiguous','Indonesia Brazil',3200)],3500);
+      assert.equal(f.superChats.page('one').cards[0].status,'pending');
+      f.batch([chat('own','!vote BR',4000),chat('switch','Indonesia',4100)],4500);
+      assert.equal(f.superChats.page('one').cards[0].country,'BR');
+      assert.equal(f.superChats.page('one').cards[0].points,5400);
+      assert.equal(f.get().recent.length,3);
+    } finally { f.db.close(); }
+  }
+});
+
+void test('current viewer selection overrides old majority and never leaks from a previous round',()=>{
+  const f=setup();
+  try {
+    f.batch([chat('a','Indonesia',1000),chat('b','Indonesia',1100),chat('c','Brazil',1200),donation('first')]);
+    assert.equal(f.superChats.page('one').cards[0].country,'BR');
+    f.set(nextMatch({...f.get(),match:{phase:'results'}},true,4000));
+    f.batch([donation('next','1000000','USD',4500)],5000);
+    assert.equal(f.superChats.page('one').cards[1].status,'pending');
+    assert.deepEqual(f.get().scores,{});
+    f.batch([chat('new','Japan',5100)],5500);
+    assert.equal(f.superChats.page('one').cards[1].country,'JP');
+    assert.equal(f.get().scores.JP,1001);
+  } finally { f.db.close(); }
+});
+
+void test('original currencies remain exact before and after conversion, including mixed-currency donors', async()=>{
+  const f=setup();
+  try {
+    f.batch([donation('idr','150000000000','IDR'),donation('idr2','50000000000','IDR',2100),donation('usd','1234567','USD',2200),donation('jpy','1000000000','JPY',2300)]);
+    const amounts=[{currency:'IDR',amountMicros:'200000000000'},{currency:'JPY',amountMicros:'1000000000'},{currency:'USD',amountMicros:'1234567'}];
+    assert.deepEqual(f.superChats.supporters('one').cards[0].amounts,amounts);
+    f.db.sql('UPDATE donations SET usd_micros=1000000 WHERE usd_micros IS NULL').run();
+    assert.deepEqual(f.superChats.supporters('one').cards[0].amounts,amounts);
+    assert.equal(f.superChats.page('one').cards[0].currency,'IDR');
+    for(const [currency,micros,display] of [['IDR','150000000000','IDR 150,000'],['JPY','1000000000','JPY 1,000'],['EUR','2500000','EUR 2.5'],['USD','1234567','$1.234567'],['KWD','1234000','KWD 1.234']])assert.equal(donationAmount(micros,currency),display);
+  } finally { f.db.close(); }
+});
+
+void test('foreign paid country stays locked while FX is pending and later viewer chats change country',()=>{
+  const f=setup();
+  try {
+    const paid=donation('fx','150000000000','IDR');paid.snippet.superChatDetails.userComment='Go Indonesia!';
+    f.batch([paid,chat('switch','Brazil',2500)]);
+    assert.equal(f.superChats.page('one').cards[0].country,'ID');
+    f.db.sql("UPDATE donations SET usd_micros=10000000 WHERE id='fx'").run();
+    f.batch([],4000);
+    assert.equal(f.get().scores.ID,10000);
+    assert.equal(f.get().scores.BR,1);
+    assert.equal(f.get().donationEvents![0].currency,'IDR');
+    assert.equal(f.get().donationEvents![0].amountMicros,'150000000000');
+  }finally{f.db.close();}
+});
+
+void test('all supported country names work inside paid messages',()=>{
+  for(const country of countries)assert.equal(parseDonationCountry(`Go ${country.name}!`),country.code,country.name);
+});
+
+void test('out-of-order wire events process chat and paid country chronologically, ignoring replay and unsupported events',()=>{
+  const f=setup();
+  try {
+    const paid=donation('wire');paid.snippet.superChatDetails.userComment='Go Japan!';
+    const method=(definition['youtube.api.v3.V3DataLiveChatMessageService'] as unknown as {StreamList:{responseSerialize:(value:unknown)=>Buffer;responseDeserialize:(value:Buffer)=>ChatBatch}}).StreamList;
+    const items=method.responseDeserialize(method.responseSerialize({items:[paid,chat('earlier','Indonesia',1000),{id:'system',snippet:{type:2,publishedAt:new Date(2100).toISOString()},authorDetails:{channelId:'donor'}}]})).items;
+    const state=f.batch(items);
+    assert.deepEqual(state.scores,{ID:1,JP:5400});
+    assert.equal(state.recent[0].text,'Indonesia');
+    assert.deepEqual(f.batch(items).scores,state.scores);
+  }finally{f.db.close();}
 });
