@@ -53,6 +53,8 @@
 .superchat-card.superchat-rank-1,.superchat-card.superchat-rank-2,.superchat-card.superchat-rank-3{border:.35cqw solid var(--medal)}
 .superchat-card .superchat-portrait{height:auto;width:100%;min-height:0;margin-bottom:1cqw;border:0;border-radius:.9cqw;box-shadow:none}
 .superchat-card .superchat-portrait>.superchat-country{bottom:-1cqw;right:-.7cqw;width:8cqw;line-height:5.5cqw;border:.4cqw solid #1b202a;border-radius:.65cqw;background-size:contain;box-shadow:0 .4cqw 1cqw #0004}
+.superchat-country-group{position:absolute;bottom:-1cqw;right:-.7cqw;display:flex;align-items:center;max-width:14cqw;padding:.3cqw;border:.4cqw solid #1b202a;border-radius:.65cqw;background:#1b202a;box-shadow:0 .4cqw 1cqw #0004;overflow:hidden}
+.superchat-country-group .superchat-country{position:static;width:6cqw;line-height:4.7cqw;background-size:contain;flex:0 0 6cqw}
 .superchat-border-crown{position:absolute;top:-1.6cqw;left:50%;transform:translateX(-50%);display:grid;place-items:center;width:4.4cqw;height:2.9cqw;background:#302718;border-radius:.6cqw;color:var(--medal)}
 .superchat-border-crown svg{width:2.8cqw;height:2.8cqw;fill:#f4cf7626;stroke-width:1.8}
 .superchat-portrait>img,.superchat-avatar-fallback{border-radius:.9cqw}

@@ -62,7 +62,8 @@ function DonationCard({ card }: { card: SupporterCard }) {
     const timer=setInterval(()=>setAmountIndex(index=>index+1),4000);
     return()=>clearInterval(timer);
   },[card.id,card.amounts.length]);
-  const country = countries.find(item => item.code === card.country)?.name;
+  const flagCodes=card.countries?.length?card.countries:(card.country?[card.country]:[]);
+  const country = flagCodes.map(code=>countries.find(item => item.code === code)?.name).filter(Boolean).join(', ');
   const amount=card.amounts.map(entry=>donationAmount(entry.amountMicros,entry.currency)).join(' + ');
   const displayedAmount=card.amounts[amountIndex%card.amounts.length];
   const medal=card.rank&&card.rank<=3?` superchat-rank-${card.rank}`:'';
@@ -70,7 +71,7 @@ function DonationCard({ card }: { card: SupporterCard }) {
     {card.rank===1&&<span className="superchat-border-crown" aria-hidden="true"><Crown/></span>}
     <div className="superchat-portrait">
       {card.avatar && failed!==card.avatar ? <img src={card.avatar} alt="" referrerPolicy="no-referrer" onError={() => setFailed(card.avatar)}/> : <div className="superchat-avatar-fallback"><UserRound/></div>}
-      {card.country&&<span className={`fi fi-${card.country.toLowerCase()} superchat-country`} role="img" title={country} aria-label={country}/>}
+      {flagCodes.length>0&&<span className="superchat-country-group" role="img" title={country} aria-label={country}>{flagCodes.map(code=><span key={code} className={`fi fi-${code.toLowerCase()} superchat-country`}/>)}</span>}
     </div>
     <div className="superchat-card-copy">
     <b className="superchat-donor" title={card.name}>{card.name.startsWith('@') ? card.name : '@' + card.name}</b>

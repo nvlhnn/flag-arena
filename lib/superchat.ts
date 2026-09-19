@@ -8,6 +8,7 @@ export type SupporterCard = {
   id:string;name:string;avatar:string;country:string|null;rank:number|null;
   usdMicros:string|null;points:number;donationCount:number;pendingCount:number;
   amounts:{currency:string;amountMicros:string}[];
+  countries?:string[];
 };
 export type SupporterPage={session:string;total:number;offset:number;cards:SupporterCard[]};
 export type OverlayLayout = 'current' | 'superchat';

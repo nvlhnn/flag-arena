@@ -49,8 +49,8 @@ export function demoSupporters(cards:DemoSuperChat[]=[]):SupporterPage{
  const entries=[...donors].map(([name,donations])=>{
   const amounts=new Map<string,bigint>();let usd=BigInt(0);
   for(const card of donations){amounts.set(card.currency,(amounts.get(card.currency)??BigInt(0))+BigInt(card.amountMicros));usd+=BigInt(card.usdMicros);}
-  const codes=new Set(donations.map(card=>card.country).filter(Boolean));
-  return {id:name,name,avatar:'',country:codes.size===1?[...codes][0]!:null,rank:0,usdMicros:String(usd),points:donations.reduce((sum,card)=>sum+card.points,0),donationCount:donations.length,pendingCount:0,amounts:[...amounts].sort(([a],[b])=>a.localeCompare(b)).map(([currency,amount])=>({currency,amountMicros:String(amount)}))};
+  const codes=new Set(donations.map(card=>card.country).filter((code):code is string=>Boolean(code)));
+  return {id:name,name,avatar:'',country:codes.size===1?[...codes][0]!:null,countries:[...codes].sort(),rank:0,usdMicros:String(usd),points:donations.reduce((sum,card)=>sum+card.points,0),donationCount:donations.length,pendingCount:0,amounts:[...amounts].sort(([a],[b])=>a.localeCompare(b)).map(([currency,amount])=>({currency,amountMicros:String(amount)}))};
  }).sort((a,b)=>BigInt(a.usdMicros)>BigInt(b.usdMicros)?-1:BigInt(a.usdMicros)<BigInt(b.usdMicros)?1:0).map((card,index)=>({...card,rank:index+1}));
  return {session:'demo',total:entries.length,offset:0,cards:entries};
 }

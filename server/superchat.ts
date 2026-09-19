@@ -101,8 +101,9 @@ export function createSuperChats(db: ArenaDatabase, getEffects:()=>DonationEffec
       }
       return [...totals].sort(([a],[b])=>a.localeCompare(b)).map(([currency,amount])=>({currency,amountMicros:String(amount)}));
     };
+    const countriesFor=(viewerId:string)=>db.sql('SELECT DISTINCT a.country FROM superchat_awards a JOIN donations d ON d.stream=a.stream AND d.id=a.id WHERE a.session=? AND d.viewer_id=? AND a.country IS NOT NULL ORDER BY a.country').all(session,viewerId).map(row=>String(row.country));
     return {session,total,offset:start,cards:rows.map(row=>({id:String(row.viewer_id),name:String(row.name),avatar:String(row.avatar),country:row.country?String(row.country):null,
-      rank:row.rank===null?null:Number(row.rank),usdMicros:row.usd_text===null?null:String(row.usd_text),amounts:amountsFor(String(row.viewer_id)),points:Number(row.points),donationCount:Number(row.donations),pendingCount:Number(row.pending)}))};
+      rank:row.rank===null?null:Number(row.rank),usdMicros:row.usd_text===null?null:String(row.usd_text),amounts:amountsFor(String(row.viewer_id)),countries:countriesFor(String(row.viewer_id)),points:Number(row.points),donationCount:Number(row.donations),pendingCount:Number(row.pending)}))};
   }
   return { capture, apply, page, supporters };
 }
