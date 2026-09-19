@@ -39,10 +39,10 @@ void test('USD purchases award 1,000 points per dollar once, without XP or catch
   try {
     f.set({ ...f.get(), scores: { BR: 10000 }, viewers: { donor: { xp: 120, lastXpAt: 0 } } });
     const state = f.batch([chat('vote', 'Indonesia', 1000), donation('paid')]);
-    assert.equal(state.scores.ID, 5415); // level 3 x catch-up 5, plus exactly 5400.
+    assert.equal(state.scores.ID, 5425); // level 3 x catch-up 5, plus a 10-point gap bonus and 5400.
     assert.equal(state.viewers!.donor.xp, 120);
-    assert.equal(f.analytics.summary('one').voters[0].points, 15);
-    assert.equal(f.batch([donation('paid')]).scores.ID, 5415);
+    assert.equal(f.analytics.summary('one').voters[0].points, 25);
+    assert.equal(f.batch([donation('paid')]).scores.ID, 5425);
     assert.equal(f.get().donationEvents?.length,1);
     assert.equal(f.get().donationEvents?.[0].points,5400);
     assert.deepEqual(f.db.load()!.live.donationEvents,f.get().donationEvents);
@@ -109,7 +109,7 @@ void test('a paid event changes the catch-up multiplier for later votes in the s
     f.set({ ...f.get(), scores: { ID: 999 }, viewers: { donor: { xp: 0, lastXpAt: 0, lastCountry: 'ID', lastVoteAt: 1000 } } });
     const state = f.batch([donation('paid', '1000000'), chat('later', 'Brazil', 2500, 'other')]);
     assert.equal(state.scores.ID, 1999);
-    assert.equal(state.scores.BR, 5);
+    assert.equal(state.scores.BR, 6);
   } finally { f.db.close(); }
 });
 

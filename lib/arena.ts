@@ -9,7 +9,7 @@ const favorites=['ID','IN','US','BR','PH','MX','TR','DE','GB','FR','JP','KR','AR
 export const countries=Object.entries(iso.getNames('en',{select:'official'})).map(([code,name])=>({code,name})).sort((a,b)=>{const ai=favorites.indexOf(a.code),bi=favorites.indexOf(b.code);return(ai<0?999:ai)-(bi<0?999:bi)||a.name.localeCompare(b.name);});
 export const levelForXp=(xp:number)=>xp>=360?5:xp>=240?4:xp>=120?3:xp>=40?2:1;
 export type ViewerProgress={name?:string;countryPoints?:Record<string,number>;xp:number;lastXpAt:number;lastCountry?:string;lastVoteAt?:number};
-export type Vote={basePoints?:number;multiplier?:number;level?:number;points?:number;levelUp?:boolean;id:string;viewerId:string;viewer:string;text:string;time:number};
+export type Vote={basePoints?:number;multiplier?:number;catchUpBonus?:number;level?:number;points?:number;levelUp?:boolean;id:string;viewerId:string;viewer:string;text:string;time:number};
 export const POINTS_PER_VOTE=1;
 export type Match={phase:'open'|'countdown'|'results';openedAt?:number;endsAt?:number;results?:{code:string;name:string;points:number}[]};
 export type ArenaState={demoSuperChats?:DemoSuperChat[];donationEffects?:DonationEffects;donationEvents?:DonationCelebration[];overlayLayout?:'current'|'superchat';superchatSession?:string;topVoters?:Record<string,{name:string;points:number}>;catchUpEnabled?:boolean;viewers?:Record<string,ViewerProgress>;subscriberAlerts?:SubscriberAlert[];audio?:AudioSettings;audioTest?:{id:string;at:number};match?:Match;scoreVersion?:2;mode:'demo'|'live';connected?:boolean;status:string;scores:Record<string,number>;recent:(Vote&{code:string})[];cooldowns:Record<string,number>;seen:string[]};
@@ -45,6 +45,11 @@ export function catchUpMultiplier(state:ArenaState,code:string):number {
  const ratio=(state.scores[code]||0)/leader;
  return ratio<.25?5:ratio<.5?4:ratio<.75?3:ratio<.9?2:1;
 }
+export function catchUpBonus(state:ArenaState,code:string):number {
+ if(state.catchUpEnabled===false)return 0;
+ const leader=Math.max(0,...Object.values(state.scores)), gap=leader-(state.scores[code]||0);
+ return leader>=1000&&gap>0?Math.floor(gap/1000):0;
+}
 export function acceptVote(state:ArenaState,vote:Vote,now=Date.now(),seenIds?:ReadonlySet<string>,owned=false):{accepted:boolean;reason:string;state:ArenaState}{
  if(state.match?.phase==='results'||(state.match?.endsAt!==undefined&&now>=state.match.endsAt))return{accepted:false,reason:'Match finished. Voting is closed.',state};
  if(state.match?.openedAt!==undefined&&vote.time<state.match.openedAt)return{accepted:false,reason:'Message belongs to an earlier match.',state};
@@ -52,7 +57,7 @@ export function acceptVote(state:ArenaState,vote:Vote,now=Date.now(),seenIds?:Re
  const code=parseCountry(vote.text);if(!code)return{accepted:false,reason:'Send one country name, flag emoji, or !vote followed by its two-letter code.',state};
  const previous=state.viewers?.[vote.viewerId];
  const xp=previous?.xp??0,basePoints=levelForXp(xp);
- const multiplier=catchUpMultiplier(state,code),points=basePoints*multiplier;
+ const multiplier=catchUpMultiplier(state,code),bonus=catchUpBonus(state,code),points=basePoints*multiplier+bonus;
  const earnsXp=!previous||vote.time-previous.lastXpAt>=5000;
  const countryPoints={...(previous?.countryPoints??{})};
  if(!previous?.countryPoints)for(const old of state.recent)if(old.viewerId===vote.viewerId)countryPoints[old.code]=(countryPoints[old.code]||0)+(old.points??1);
@@ -61,7 +66,7 @@ export function acceptVote(state:ArenaState,vote:Vote,now=Date.now(),seenIds?:Re
  const level=levelForXp(progress.xp);
  const next=owned?state:{...state,viewers:{...state.viewers},scores:{...state.scores},recent:[...state.recent],seen:[...state.seen],cooldowns:{}};
  (next.viewers??={})[vote.viewerId]=progress;next.scores[code]=(next.scores[code]||0)+points;
- next.recent.unshift({...vote,viewer:vote.viewer.slice(0,60),code,points,basePoints,multiplier,level,levelUp:level>basePoints});if(next.recent.length>500)next.recent.length=500;
+ next.recent.unshift({...vote,viewer:vote.viewer.slice(0,60),code,points,basePoints,multiplier,catchUpBonus:bonus,level,levelUp:level>basePoints});if(next.recent.length>500)next.recent.length=500;
  next.seen.push(vote.id);if(next.seen.length>10000)next.seen.shift();
  return{accepted:true,reason:'Vote counted.',state:next};
 }
