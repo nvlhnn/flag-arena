@@ -29,18 +29,26 @@ test('donation controls persist and previews never award points',async()=>{
  await post('donation-effects',defaultDonationEffects);
 });
 void test('overlay layout is persistent and validates input; demo never invents donations',async()=>{
- assert.equal((await(await fetch(`${base}/api/state`)).json()).overlayLayout,'current');
+ assert.equal((await(await fetch(`${base}/api/state`)).json()).overlayLayout,'classic');
  assert.equal((await(await fetch(`${base}/api/supporters`)).json()).total,0);
  assert.equal((await fetch(`${base}/api/supporters?offset=-1`)).status,400);
  assert.equal((await fetch(`${base}/api/supporters?size=61`)).status,400);
  assert.equal((await post('layout',{layout:'invalid'})).status,400);
- assert.equal((await post('layout',{layout:'superchat'})).status,200);
- assert.equal(readSaved().overlayLayout,'superchat');
- assert.equal((await(await fetch(`${base}/api/state`)).json()).overlayLayout,'superchat');
+ assert.equal((await post('layout',{layout:'superchat'})).status,400);
+ assert.equal((await post('supporters/visibility',{enabled:'yes'})).status,400);
+ assert.equal((await post('supporters/visibility',{enabled:true})).status,200);
+ assert.equal(readSaved().overlaySupporters,true);
+ assert.equal((await(await fetch(`${base}/api/state`)).json()).overlaySupporters,true);
  assert.equal((await(await fetch(`${base}/api/superchats`)).json()).total,0);
  assert.equal((await fetch(`${base}/api/superchats?offset=-1`)).status,400);
  assert.equal((await fetch(`${base}/api/superchats?size=61`)).status,400);
- await post('layout',{layout:'current'});
+ assert.equal((await post('layout',{layout:'tactical'})).status,200);
+ assert.equal(readSaved().overlayLayout,'tactical');
+ assert.equal((await(await fetch(`${base}/api/state`)).json()).overlayLayout,'tactical');
+ assert.equal((await post('supporters/visibility',{enabled:false})).status,200);
+ assert.equal(readSaved().overlaySupporters,false);
+ assert.equal((await(await fetch(`${base}/api/state`)).json()).overlaySupporters,false);
+ await post('layout',{layout:'classic'});
 });
 void test('storage endpoints list sessions and reject unreviewed or foreign cleanup',async()=>{
  const storage=await(await fetch(`${base}/api/storage`)).json();assert.deepEqual(storage.sessions,[]);assert.ok(storage.databaseBytes>0);

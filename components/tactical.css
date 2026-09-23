@@ -1,0 +1,438 @@
+.arena.arena-tactical {
+  grid-template-rows: 3% 8% 5% 11% 4% 69%;
+  padding: 1.5% 2%;
+  border: 1px solid #263b3f;
+  border-radius: 0;
+  font-family: Consolas, 'Courier New', monospace;
+  background:
+    linear-gradient(#00ff6610 1px, transparent 1px),
+    linear-gradient(90deg, #00ff6609 1px, transparent 1px), #050a0b;
+  background-size: 4cqw 4cqw;
+  color: #dce7ec;
+}
+.overlay-only > .arena.arena-tactical {
+  padding: 0.844vh 1.125vh;
+}
+.arena-tactical .reward-strip {
+  grid-row: 2;
+  grid-template-columns: 1fr 1fr;
+  padding: 0 0 1cqw;
+  gap: 1.5cqw;
+}
+.arena-tactical .reward-strip > div {
+  border: 1px solid #a5780c;
+  border-radius: 1.4cqw;
+  padding: 1.2cqw 1.5cqw;
+  gap: 2cqw;
+  background:
+    repeating-linear-gradient(135deg, #ffc62906 0 2cqw, transparent 2cqw 4cqw),
+    #101512;
+  box-shadow: inset 0 0 2cqw #ffbc0010;
+}
+.arena-tactical .reward-strip > div.superchat-subscribe {
+  border-color: #007f63;
+  background:
+    repeating-linear-gradient(135deg, #00ed9806 0 2cqw, transparent 2cqw 4cqw),
+    #091815;
+}
+.arena-tactical .reward-strip .superchat-reward-icon {
+  width: 8cqw;
+  height: 8cqw;
+  border: 1px solid #ffc426;
+  border-radius: 1cqw;
+  background: #49330d;
+  box-shadow: 0 0 2cqw #ffb80025;
+}
+.arena-tactical .reward-strip .superchat-reward-icon svg {
+  width: 4cqw;
+  height: 4cqw;
+  color: #ffc62c;
+}
+.arena-tactical .superchat-subscribe .superchat-reward-icon {
+  background: #04271d;
+  border-color: #00c998;
+}
+.arena-tactical .superchat-subscribe .superchat-reward-icon svg {
+  color: #00dda2;
+}
+.arena-tactical .reward-strip small {
+  font-size: 1.9cqw;
+  letter-spacing: 0.05cqw;
+  color: #ffca31;
+}
+.arena-tactical .reward-strip b {
+  font-size: 3.3cqw;
+  margin: 0.5cqw 0;
+  color: #fff2b9;
+}
+.arena-tactical .reward-strip b em {
+  font-size: 2cqw;
+  color: #d5b754;
+}
+.arena-tactical .reward-strip i {
+  font-size: 1.65cqw;
+  color: #8b9d99;
+}
+.arena-tactical .superchat-subscribe small,
+.arena-tactical .superchat-subscribe b {
+  color: #91f7d3;
+}
+.arena-tactical .stream-chat {
+  grid-row: 3;
+  margin: 0 0 1cqw;
+  padding: 0 2cqw;
+  border: 1px solid #29414b;
+  border-radius: 0.5cqw;
+  background: #0b161a;
+  min-height: 0;
+}
+.arena-tactical .chat-heading {
+  font-size: 1.5cqw;
+  color: #91a5b0;
+}
+.arena-tactical .stream-chat-row b {
+  font-size: 2.5cqw;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+.arena-tactical .stream-chat-row > strong {
+  color: #00deff;
+  font-size: 2.8cqw;
+}
+.arena-tactical .viewer-level {
+  color: #00eda7;
+  background: #063a2a;
+  border-radius: 0;
+}
+.arena-tactical .stream-chat-row > .fi {
+  width: 6.5cqw;
+  line-height: 4.5cqw;
+  border-radius: 0;
+}
+.tactical-ticker {
+  grid-row: 5;
+  display: flex;
+  align-items: center;
+  border-block: 1px solid #263b3f;
+  background: #0b1419;
+  margin-bottom: 1cqw;
+  min-width: 0;
+  overflow: hidden;
+}
+.tactical-ticker > b {
+  font-size: 1.55cqw;
+  white-space: nowrap;
+  padding: 1cqw 2cqw;
+  color: #8ea2b3;
+  border-right: 1px solid #29404a;
+}
+.tactical-ticker-window {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+.tactical-ticker-track {
+  display: flex;
+  width: max-content;
+  animation: tactical-scroll 70s linear infinite;
+}
+.tactical-ticker-group {
+  display: flex;
+  flex-shrink: 0;
+}
+.tactical-ticker-group > span {
+  display: flex;
+  align-items: center;
+  gap: 1cqw;
+  padding: 0 2cqw;
+  font-size: 2cqw;
+  white-space: nowrap;
+}
+.tactical-ticker-group em {
+  font-style: normal;
+  color: #ffcf29;
+}
+.tactical-ticker-group .fi {
+  width: 3.8cqw;
+  line-height: 2.5cqw;
+}
+.tactical-ticker-group strong {
+  max-width: 25cqw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tactical-ticker-group small {
+  color: #ffd32c;
+  font-size: 1.8cqw;
+}
+.tactical-ticker-empty {
+  font-size: 1.8cqw;
+  padding-left: 2cqw;
+  color: #00cfa8;
+}
+.arena-tactical .flag-grid {
+  grid-row: 6;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  grid-template-rows: repeat(11, minmax(0, 1fr));
+  gap: 1.2cqw 0.65cqw;
+  padding: 0.3cqw 0 1cqw;
+  min-height: 0;
+}
+.arena-tactical .country-tile {
+  border-bottom: 1px solid #1b3330;
+  background: #07131080;
+  justify-content: center;
+}
+.arena-tactical .country-tile strong {
+  font-size: 2.6cqw;
+  color: #bfcfca;
+  letter-spacing: -0.1cqw;
+}
+.arena-tactical .country-tile:nth-child(-n + 9) strong {
+  color: #ffd029;
+}
+.arena-tactical .country-tile.first {
+  background: #4a370d44;
+  box-shadow: 0 0 1cqw #e6af1933;
+}
+.arena-tactical .flag-frame {
+  aspect-ratio: 4/3;
+  max-height: 7.2cqw;
+}
+.arena-tactical .leader-crown {
+  display: none;
+}
+.arena-tactical .flag-frame > small {
+  font-family: Consolas, monospace;
+  font-size: 1.5cqw;
+  background: #0d181dc9;
+  color: white;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0.2cqw 0.4cqw;
+  min-width: 0;
+}
+@keyframes tactical-scroll {
+  to {
+    transform: translateX(-50%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tactical-ticker-track {
+    animation: none;
+  }
+}
+
+.arena-tactical .rank-medal::before,
+.arena-tactical .rank-medal::after {
+  display: none;
+}
+.tactical-ticker-track:has(.tactical-ticker-empty) {
+  animation: none;
+}
+.tactical-ticker-track {
+  min-width: 200%;
+}
+.tactical-ticker-group {
+  min-width: 50%;
+}
+.layout-options {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.arena-tactical .country-tile strong {
+  margin-top: 0.5cqw;
+}
+
+.arena.arena-tactical {
+  grid-template-rows: 8% 5% 11% 4% 72%;
+}
+.arena-tactical .reward-strip {
+  grid-row: 1;
+}
+.arena-tactical .stream-chat {
+  grid-row: 2;
+}
+.arena-tactical .tactical-ticker {
+  grid-row: 4;
+}
+.arena-tactical .flag-grid {
+  grid-row: 5;
+}
+.arena.arena-tactical.tactical-no-supporters {
+  grid-template-rows: 8% 5% 4% 83%;
+}
+.arena-tactical.tactical-no-supporters .tactical-ticker {
+  grid-row: 3;
+}
+.arena-tactical.tactical-no-supporters .flag-grid {
+  grid-row: 4;
+  grid-template-rows: repeat(13, minmax(0, 1fr));
+}
+.layout-options {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.supporter-toggle {
+  margin-top: 10px;
+}
+.supporter-toggle[aria-checked='true'] {
+  border-color: #10b981;
+  background: #12352d;
+  color: #a7f3d0;
+}
+
+/* Tactical supporter wall follows the original Stitch reference. */
+.arena-tactical .superchat-rail {
+  grid-row: 3;
+  margin: 0 0 1cqw;
+  padding: 1.4cqw;
+  border: 0.45cqw solid #fbbf24;
+  border-radius: 1.2cqw;
+  background: linear-gradient(#141c22, #0a0f12);
+  box-shadow: 0 0 3cqw #f59e0b40;
+}
+.arena-tactical .superchat-rail::before {
+  background: repeating-linear-gradient(-45deg,#ff9e1b18 0 1cqw,#0004 1cqw 2cqw);
+  inset: 0;
+  animation: none;
+  z-index: -1;
+}
+.arena-tactical .superchat-rail-heading {
+  min-height: 4.8cqw;
+  margin: 0 0 0.5cqw;
+  padding: 0 0.6cqw 0.7cqw;
+  border-bottom: 1px solid #f59e0b66;
+}
+.arena-tactical .superchat-rail-heading > span {
+  color: #fcd34d;
+  font-size: 2.25cqw;
+  letter-spacing: 0.14cqw;
+  text-shadow: 0 0 1cqw #f59e0b80;
+}
+.arena-tactical .superchat-rail-heading svg {
+  width: 3.6cqw;
+  height: 3.6cqw;
+  padding: 0.5cqw;
+  color: #15120a;
+  fill: #15120a;
+  border-radius: 0.5cqw;
+  background: linear-gradient(45deg,#d97706,#fde047);
+}
+.arena-tactical .superchat-rail-heading .tactical-patron {
+  display: flex;
+  align-items: center;
+  gap: 0.6cqw;
+  padding: 0.45cqw 0.8cqw;
+  border: 1px solid #f59e0b;
+  border-radius: 0.4cqw;
+  color: #fcd34d;
+  background: #451a03;
+  font-size: 1.5cqw;
+  font-weight: 900;
+}
+.tactical-patron i {
+  width: 1.3cqw;
+  height: 1.3cqw;
+  border-radius: 50%;
+  background: #fbbf24;
+  box-shadow: 0 0 1cqw #fbbf24;
+}
+.arena-tactical .superchat-window {
+  margin: 0;
+  padding: 0.5cqw 0 0.7cqw;
+}
+.arena-tactical .superchat-track {
+  display: flex;
+  gap: 1.8cqw;
+  align-items: center;
+}
+.tactical-runway-item {
+  display: flex;
+  align-items: center;
+  gap: 1.8cqw;
+  flex: 0 0 auto;
+}
+.arena-tactical .superchat-card,
+.arena-tactical .superchat-card.superchat-rank-1 {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  width: max-content;
+  min-width: 30cqw;
+  max-width: 80cqw;
+  height: 8.5cqw;
+  gap: 1.5cqw;
+  padding: 0.55cqw 1.7cqw;
+  border: 1px solid #233540;
+  border-radius: 0.9cqw;
+  background: #121a1f;
+  box-shadow: none;
+}
+.arena-tactical .superchat-card.superchat-rank-1 {
+  border: 0.45cqw solid #fbbf24;
+  background: linear-gradient(90deg,#211b11,#1a252d,#121a1f);
+  box-shadow: 0 0 2cqw #f59e0b80;
+}
+.arena-tactical .superchat-card.superchat-rank-2 {
+  border-color: #10b981;
+  box-shadow: 0 0 1.5cqw #10b98144;
+}
+.arena-tactical .superchat-card.superchat-rank-3 {
+  border-color: #cbd5e1;
+  box-shadow: 0 0 1.5cqw #cbd5e144;
+}
+.arena-tactical .superchat-border-crown {display:none}
+.arena-tactical .superchat-card .superchat-portrait {
+  flex: 0 0 6.5cqw;
+  width: 6.5cqw;
+  height: 6.5cqw;
+  margin: 0;
+  border: 1px solid #475569;
+  border-radius: 0.7cqw;
+}
+.arena-tactical .superchat-rank-1 .superchat-portrait {border-color:#fbbf24;box-shadow:0 0 1.5cqw #f59e0b80}
+.arena-tactical .superchat-rank-2 .superchat-portrait {border-color:#10b981}
+.arena-tactical .superchat-rank-3 .superchat-portrait {border-color:#cbd5e1}
+.arena-tactical .superchat-avatar-fallback {display:grid;place-items:center;background:#1a262e}
+.tactical-avatar-symbol {font-size:3.3cqw;line-height:1}
+.arena-tactical .superchat-country-group {bottom:-0.7cqw;right:-0.6cqw;max-width:7cqw}
+.arena-tactical .superchat-country-group .superchat-country {width:3.3cqw;flex-basis:3.3cqw;line-height:2.1cqw}
+.arena-tactical .superchat-card-copy {flex:0 1 auto;padding:0;gap:0.4cqw}
+.tactical-donor-line {display:flex;align-items:center;gap:0.6cqw;min-width:0}
+.arena-tactical .superchat-donor {font-size:2.15cqw;font-weight:900;max-width:42cqw;min-width:0}
+.tactical-donor-badge {flex:0 0 auto;padding:0 0.6cqw;border:1px solid #10b98199;border-radius:0.25cqw;color:#6ee7b7;background:#022c22;font-size:1.45cqw;font-weight:900;white-space:nowrap}
+.tactical-donor-badge.is-mvp {color:#fef08a;border-color:#fcd34d;background:linear-gradient(90deg,#dc2626,#d97706)}
+.arena-tactical .superchat-rank-3 .tactical-donor-badge {color:#fcd34d;border-color:#f59e0b99;background:#451a03}
+.arena-tactical .superchat-card .superchat-amount {font-size:2cqw;line-height:1.1;font-weight:900;color:#22d3ee;letter-spacing:0}
+.arena-tactical .superchat-rank-1 .superchat-amount {color:#fcd34d}
+.arena-tactical .superchat-rank-2 .superchat-amount {color:#34d399}
+.arena-tactical .superchat-rank-3 .superchat-amount {color:#fcd34d}
+.tactical-patron-card {display:flex;align-items:center;gap:1.5cqw;flex:0 0 auto;height:8.5cqw;padding:0.55cqw 1.8cqw;border:0.45cqw dashed #fbbf24cc;border-radius:0.9cqw;background:#0e161b;box-shadow:0 0 2cqw #f59e0b33}
+.tactical-patron-card > span {display:grid;place-items:center;flex:0 0 6cqw;width:6cqw;height:6cqw;border:1px solid #fbbf24;border-radius:0.6cqw;color:#fcd34d;background:#451a03;font-size:3cqw}
+.tactical-patron-card > div {display:flex;flex-direction:column;gap:0.3cqw}
+.tactical-patron-card b {color:#fcd34d;font-size:1.9cqw;white-space:nowrap}
+.tactical-patron-card small {color:#cbd5e1;font-size:1.6cqw;white-space:nowrap}
+
+.arena-tactical .flag-frame > .rank-medal {
+  display: flex;
+  align-items: center;
+  gap: 0.1cqw;
+  top: 0;
+  left: 0;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  padding: 0.1cqw 0.3cqw;
+  border: 0;
+  border-radius: 0 0 0.7cqw 0;
+  background: #090909e6;
+  font-size: 2.3cqw;
+  line-height: 1;
+  color: var(--medal);
+}
+.arena-tactical .flag-frame > .rank-medal span {
+  font-size: 2.3cqw;
+  line-height: 1;
+}

@@ -13,7 +13,8 @@ export type SavedArena = {
   donationEffects?: unknown;
   subscriberLedger?: unknown;
   videoOwner?: string;
-  overlayLayout?: 'current' | 'superchat';
+  overlayLayout?: 'classic' | 'current' | 'superchat' | 'tactical';
+  overlaySupporters?: boolean;
 };
 
 export function openDatabase(directory: string) {

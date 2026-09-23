@@ -42,14 +42,15 @@ const diagnostics=createDiagnostics(dataDir);
 // Track it for visibility; only Google's actual quota responses stop API use.
 const budget=createRequestBudget(dataDir,Date.now,9000,false);
 let audio:AudioSettings={...defaultAudio},audioTest:{id:string;at:number}|undefined;
-let overlayLayout:'current'|'superchat'='current';
+let overlayLayout:'classic'|'tactical'='classic',overlaySupporters=false;
 let savedMode:'demo'|'live'='demo';
 let resume:{chat:string;page?:string;since:number}|undefined;
 let demo=initialState(),live: ArenaState={...initialState(),mode:'live',status:'Disconnected — scores saved.'},savedVideo='';
 const saved=database.load();
 if(saved){
  if(validDonationEffects(saved.donationEffects))donationEffects=saved.donationEffects;
- overlayLayout=saved.overlayLayout==='superchat'?'superchat':'current';
+ overlayLayout=saved.overlayLayout==='tactical'?'tactical':'classic';
+ overlaySupporters=typeof saved.overlaySupporters==='boolean'?saved.overlaySupporters:saved.overlayLayout==='superchat'||saved.overlayLayout==='tactical';
  const savedAudio=saved.audio as AudioSettings|undefined;
  if(savedAudio&&typeof savedAudio.muted==='boolean'&&typeof savedAudio.voice==='boolean'&&typeof savedAudio.volume==='number'&&savedAudio.volume>=0&&savedAudio.volume<=1)audio=savedAudio;
  const savedLedger=saved.subscriberLedger as SubscriberLedger|undefined;
@@ -64,10 +65,10 @@ if(savedVideo&&!database.sql('SELECT 1 FROM streams WHERE id=?').get(savedVideo)
 });
 let state=savedMode==='live'?{...live,connected:false,status:'Disconnected — scores saved.'}:demo,session:{since:number;controller:AbortController;close:()=>void}|undefined,generation=0,connecting=false;
 const clients=new Set<ServerResponse>();
-function persist(){database.save({demo,live,video:savedVideo,resume,activeMode:state.mode,audio,subscriberLedger:ledger,videoOwner:savedVideoOwner,overlayLayout,donationEffects});}
+function persist(){database.save({demo,live,video:savedVideo,resume,activeMode:state.mode,audio,subscriberLedger:ledger,videoOwner:savedVideoOwner,overlayLayout,overlaySupporters,donationEffects});}
 const cleanup=createCleanup(database,()=>savedVideo);
 persist();
-function displayState(){return {...state,donationEffects,overlayLayout,superchatSession:state.mode==='live'?database.sessionFor(savedVideo):'',topVoters:topCountryVoters(state),audio,audioTest,seen:[],cooldowns:{},viewers:undefined};}
+function displayState(){return {...state,donationEffects,overlayLayout,overlaySupporters,superchatSession:state.mode==='live'?database.sessionFor(savedVideo):'',topVoters:topCountryVoters(state),audio,audioTest,seen:[],cooldowns:{},viewers:undefined};}
 let broadcastTimer:ReturnType<typeof setTimeout>|undefined;
 let lastBroadcastState:ArenaState|undefined,lastBroadcastVideo='';
 function broadcast(){broadcastTimer=undefined;if(!clients.size)return;const current=displayState();const payload=JSON.stringify(liveUpdate(current,lastBroadcastState,lastBroadcastVideo!==savedVideo));lastBroadcastState=current;lastBroadcastVideo=savedVideo;for(const client of clients){if(client.writableLength>1024*1024){client.destroy();clients.delete(client);}else client.write(`data: ${payload}\n\n`);}}
@@ -169,7 +170,7 @@ createServer(async(req,res)=>{
    if(!path||!existsSync(path)){json(res,404,{error:'Voice clip unavailable.'});return;}
    res.writeHead(200,{'Content-Type':'audio/wav','Cache-Control':'private, max-age=86400'});createReadStream(path).on('error',()=>res.destroy()).pipe(res);return;
   }
-  if(req.method==='GET'&&url.pathname==='/api/state'){json(res,200,{...state,audio,audioTest,overlayLayout,donationEffects});return;}
+  if(req.method==='GET'&&url.pathname==='/api/state'){json(res,200,{...state,audio,audioTest,overlayLayout,overlaySupporters,donationEffects});return;}
   if(req.method==='GET'&&url.pathname==='/api/config'){json(res,200,{keyCount:envKeys.length,previousVideo:savedVideo,subscribers:{...oauth.status(),enabled:subscriberEnabled,status:subscriberStatus,lastCheck:subscriberLastCheck,ownerId:ledger?.ownerId,recordsLastCheck:subscriberRecords,pendingBonuses:Object.keys(ledger?.pending||{}).length,nextRetryAt:subscriberNextRetry?new Date(subscriberNextRetry).toISOString():null}});return;}
   if(req.method==='GET'&&url.pathname==='/api/subscribers/callback'){await oauth.callback(url.searchParams.get('code')||'',url.searchParams.get('state')||'');const token=await oauth.access();const owner=await subscriberRequest('channels',{part:'id',mine:'true'},token,()=>budget.reserve('lookup'));const ownerId=owner.items?.[0]?.id;if(!ownerId)throw new Error('No YouTube channel found for this sign-in.');if(ledger?.ownerId!==ownerId)ledger={ownerId,streamId:savedVideo,baselineAt:Date.now(),known:{},pending:{}};subscriberEnabled=true;subscriberStatus='Signed in. Waiting for the matching live channel.';persist();res.writeHead(303,{Location:'/','Cache-Control':'no-store','Referrer-Policy':'no-referrer'});res.end();void pollSubscribers();return;}
   if(req.method==='GET'&&url.pathname==='/api/diagnostics'){json(res,200,{...diagnostics.read(),budget:budget.read(),resumeAvailable:!!resume?.page});return;}
@@ -192,7 +193,8 @@ createServer(async(req,res)=>{
     state={...state,donationEvents:queueDonation(state.donationEvents??[],{id:'preview:'+Date.now(),name:'Alex',country:body.country,points:5000,amountMicros:'5000000',currency:'USD',preview:true},donationEffects.duration,Date.now())};publish();json(res,200,{ok:true});return;
    }
    if(url.pathname==='/api/superchats/test'){state=addDemoSuperChat({...state,donationEffects},body);publish();json(res,200,{ok:true});return;}
-   if(url.pathname==='/api/layout'){if(!['current','superchat'].includes(body.layout))throw new Error('Choose Current or Super Chat layout.');overlayLayout=body.layout;publish();json(res,200,{ok:true});return;}
+   if(url.pathname==='/api/layout'){if(!['classic','tactical'].includes(body.layout))throw new Error('Choose Classic or Tactical layout.');overlayLayout=body.layout;publish();json(res,200,{ok:true});return;}
+   if(url.pathname==='/api/supporters/visibility'){if(typeof body.enabled!=='boolean')throw new Error('Choose whether to show supporters.');overlaySupporters=body.enabled;publish();json(res,200,{ok:true});return;}
    if(url.pathname==='/api/audio'){if(typeof body.muted!=='boolean'||typeof body.voice!=='boolean'||typeof body.volume!=='number'||!Number.isFinite(body.volume)||body.volume<0||body.volume>1)throw new Error('Invalid audio settings.');if(body.overtakeStyle!==undefined&&!['grouped','all'].includes(String(body.overtakeStyle)))throw new Error('Invalid announcement style.');audio={overtakeStyle:body.overtakeStyle as 'grouped'|'all'|undefined,muted:body.muted,voice:body.voice,volume:body.volume};publish();json(res,200,{ok:true});return;}
    if(url.pathname==='/api/audio/test'){audioTest={id:crypto.randomUUID(),at:Date.now()};publish();json(res,200,{ok:true});return;}
    if(url.pathname==='/api/match/finish'){state=finishMatch(state);publish();json(res,200,{ok:true});return;}
